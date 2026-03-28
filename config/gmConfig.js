@@ -1,0 +1,5 @@
+export const GM_CONFIG = {
+  SALARY_MULTIPLIER: 8,
+  MIN_SALARY: 100,
+  INITIAL_BUDGET: 8000,
+};

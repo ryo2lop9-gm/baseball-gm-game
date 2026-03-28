@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baseball GM Prototype</title>
+  <style>
+    :root {
+      --bg: #0b1320;
+      --panel: #132033;
+      --panel-2: #1a2b42;
+      --line: rgba(255,255,255,0.08);
+      --text: #eef4ff;
+      --muted: #9eb0cf;
+      --accent: #3b82f6;
+      --accent-2: #1d4ed8;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --ball: #22c55e;
+      --strike: #facc15;
+      --out: #ef4444;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #0a1220, #0d1728 40%, #0d1829 100%);
+      color: var(--text);
+    }
+
+    .app-shell {
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 20px 16px 32px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title-wrap h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .title-wrap p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tabbar {
+      display: inline-flex;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 6px;
+      background: rgba(255,255,255,0.04);
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn,
+    button,
+    select,
+    input {
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    .tab-btn,
+    button {
+      cursor: pointer;
+      padding: 10px 14px;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+    }
+
+    .tab-btn.active,
+    button.primary-btn,
+    .decision-btn.positive {
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    }
+
+    .decision-btn.negative {
+      background: rgba(239,68,68,0.18);
+      border: 1px solid rgba(239,68,68,0.35);
+    }
+
+    .decision-btn.neutral {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--line);
+    }
+
+    select,
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .card,
+    .summary-card,
+    .kpi-card,
+    .decision-card,
+    .inbox-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.16);
+    }
+
+    .panel-title {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    .section-note,
+    .summary-sub,
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .page-title {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+
+    .page-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .status-pill.ok {
+      background: rgba(34,197,94,0.16);
+      color: #a7f3d0;
+      border: 1px solid rgba(34,197,94,0.28);
+    }
+
+    .status-pill.warning {
+      background: rgba(245,158,11,0.16);
+      color: #fde68a;
+      border: 1px solid rgba(245,158,11,0.28);
+    }
+
+    .gm-stack,
+    .stats-stack,
+    .tuning-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .gm-grid,
+    .gm-bottom-grid,
+    .gm-kpis,
+    .stats-top-grid,
+    .stats-main-grid,
+    .editor-grid,
+    .toolbar-row,
+    .stats-filter-grid,
+    .tuning-live-layout,
+    .tuning-state-grid,
+    .tuning-metric-grid,
+    .tuning-analysis-grid,
+    .tuning-season-header {
+      display: grid;
+      gap: 16px;
+    }
+
+    .gm-grid { grid-template-columns: 1.1fr 0.9fr; }
+    .gm-bottom-grid { grid-template-columns: repeat(3, 1fr); }
+    .gm-kpis { grid-template-columns: repeat(5, minmax(140px, 1fr)); }
+    .stats-top-grid { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+    .stats-main-grid { grid-template-columns: 1.2fr 0.8fr; }
+    .editor-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    .toolbar-row { grid-template-columns: repeat(auto-fit, minmax(140px, max-content)); align-items: center; }
+    .stats-filter-grid { grid-template-columns: repeat(5, minmax(160px, 1fr)); }
+    .tuning-live-layout { grid-template-columns: 1.35fr 0.95fr; }
+    .tuning-state-grid { grid-template-columns: 1fr 1fr; }
+    .tuning-metric-grid { grid-template-columns: repeat(3, minmax(160px, 1fr)); }
+    .tuning-analysis-grid { grid-template-columns: 1fr 1fr; }
+    .tuning-season-header { grid-template-columns: minmax(180px, 0.8fr) minmax(320px, 1.2fr); }
+
+    .inbox-title-row,
+    .decision-actions,
+    .score-strip,
+    .score-strip-team,
+    .count-stack,
+    .base-strip,
+    .runner-list {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .kpi-label,
+    .summary-label,
+    .decision-type,
+    .mini-label,
+    .mini-table-title {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .kpi-value,
+    .summary-value,
+    .score-value {
+      font-weight: 800;
+    }
+
+    .kpi-value,
+    .summary-value {
+      font-size: 24px;
+      margin-top: 8px;
+    }
+
+    .score-value {
+      font-size: 2rem;
+      min-width: 42px;
+      text-align: center;
+    }
+
+    .gm-scroll,
+    .scroll-card {
+      min-height: 260px;
+      overflow: auto;
+    }
+
+    .decision-card,
+    .inbox-card {
+      margin-bottom: 12px;
+    }
+
+    .decision-title,
+    .inbox-title {
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .decision-body,
+    .inbox-body {
+      color: #d7e3fa;
+      line-height: 1.55;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .decision-actions { margin-top: 12px; }
+
+    .inbox-badge,
+    .badge {
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+
+    .inbox-card.system { border-color: rgba(59,130,246,0.28); }
+    .inbox-card.day_result { border-color: rgba(34,197,94,0.28); }
+    .inbox-card.decision_result { border-color: rgba(245,158,11,0.28); }
+    .highlight-row td { background: rgba(59,130,246,0.08); }
+    .result-focus { border-color: rgba(59,130,246,0.28); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .empty-note {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 12px 0;
+    }
+
+    .tuning-panel-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .tuning-snapshot-card {
+      display: grid;
+      gap: 8px;
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .tuning-snapshot-label {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .tuning-snapshot-value {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .tuning-snapshot-sub {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tuning-runner-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .tuning-runner-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .tuning-zone-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .tuning-section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .tuning-section-head .panel-title {
+      margin-bottom: 4px;
+    }
+
+    .score-strip {
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(9,18,32,0.98), rgba(18,30,49,0.98));
+      box-shadow: 0 14px 32px rgba(0,0,0,0.28);
+    }
+
+    .score-strip-team {
+      min-width: 0;
+    }
+
+    .score-strip-name {
+      font-size: 1.05rem;
+      font-weight: 800;
+    }
+
+    .score-strip-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .score-strip-center {
+      text-align: center;
+    }
+
+    .count-stack { justify-content: space-between; }
+
+    .count-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .count-group-label {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .count-lights {
+      display: flex;
+      gap: 5px;
+      min-height: 14px;
+    }
+
+    .count-light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #22344d;
+      border: 1px solid #35506f;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.4);
+    }
+
+    .count-light.on.ball { background: var(--ball); box-shadow: 0 0 10px rgba(34,197,94,0.55); }
+    .count-light.on.strike { background: var(--strike); box-shadow: 0 0 10px rgba(250,204,21,0.55); }
+    .count-light.on.out { background: var(--out); box-shadow: 0 0 10px rgba(239,68,68,0.55); }
+
+    .base-diamond {
+      position: relative;
+      width: 92px;
+      height: 76px;
+      margin: 0 auto;
+    }
+
+    .base {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border: 1px solid #6b7b94;
+      background: rgba(255,255,255,0.04);
+      transform: rotate(45deg);
+      border-radius: 3px;
+    }
+
+    .base.on {
+      background: rgba(250,204,21,0.92);
+      border-color: rgba(250,204,21,0.95);
+      box-shadow: 0 0 12px rgba(250,204,21,0.45);
+    }
+
+    #headerBase1 { right: 12px; top: 28px; }
+    #headerBase2 { left: 38px; top: 4px; }
+    #headerBase3 { left: 12px; top: 28px; }
+
+    .zone-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .zone-cell {
+      aspect-ratio: 1;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+
+    .zone-cell.ball-zone { background: rgba(255,255,255,0.04); }
+    .zone-cell.strike-zone { background: rgba(59,130,246,0.12); }
+    .zone-cell.hit { outline: 2px solid #facc15; background: rgba(250,204,21,0.18); }
+
+    .log-box {
+      min-height: 240px;
+      max-height: 360px;
+      overflow: auto;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(0,0,0,0.16);
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .log-line + .log-line { margin-top: 4px; }
+
+    @media (max-width: 1100px) {
+      .gm-grid,
+      .gm-bottom-grid,
+      .stats-main-grid,
+      .tuning-live-layout,
+      .tuning-state-grid,
+      .tuning-analysis-grid,
+      .tuning-season-header {
+        grid-template-columns: 1fr;
+      }
+
+      .gm-kpis,
+      .stats-top-grid,
+      .stats-filter-grid,
+      .editor-grid,
+      .tuning-metric-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .gm-kpis,
+      .stats-top-grid,
+      .stats-filter-grid,
+      .editor-grid,
+      .tuning-metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .score-strip {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="title-wrap">
+        <h1>Baseball GM Prototype</h1>
+        <p>GM本編 / 成績DB / チューニングを分離した構成</p>
+      </div>
+    </header>
+
+    <nav class="tabbar">
+      <button id="showGMPageBtn" class="tab-btn active">GMデスク</button>
+      <button id="showStatsPageBtn" class="tab-btn">選手成績一覧</button>
+      <button id="showTuningPageBtn" class="tab-btn">チューニング</button>
+    </nav>
+
+    <section id="gmPage" class="page active">
+      <div class="section-header">
+        <div>
+          <h2 class="page-title">GMデスク</h2>
+          <p class="page-subtitle">日次進行、意思決定カード、順位、ロースター、FA確認</p>
+        </div>
+        <span id="gmStatusPill" class="status-pill ok">進行可能</span>
+      </div>
+
+      <div class="gm-stack">
+        <div class="gm-kpis">
+          <div class="kpi-card">
+            <div class="kpi-label">Team</div>
+            <div id="gmTeamName" class="kpi-value">-</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Day</div>
+            <div id="gmDayValue" class="kpi-value">-</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Budget</div>
+            <div id="gmBudgetValue" class="kpi-value">-</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Payroll</div>
+            <div id="gmPayrollValue" class="kpi-value">-</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Pending</div>
+            <div id="gmPendingValue" class="kpi-value">-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="toolbar-row">
+            <button id="gmAdvanceDayBtn" class="primary-btn">1日進行</button>
+            <button id="gmAdvanceWeekBtn">7日進行</button>
+            <button id="gmNewSeasonBtn">新シーズン開始</button>
+            <button id="jumpToStatsBtn">成績一覧へ</button>
+          </div>
+        </div>
+
+        <div class="gm-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">判断待ちカード</h3>
+            <div id="gmPendingCards"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">Inbox</h3>
+            <div id="gmInbox"></div>
+          </div>
+        </div>
+
+        <div class="gm-bottom-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">順位表</h3>
+            <div id="gmStandings"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">直近試合結果</h3>
+            <div id="gmLastResults"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">トランザクション</h3>
+            <div id="gmTransactions"></div>
+          </div>
+        </div>
+
+        <div class="gm-bottom-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">スタメン</h3>
+            <div id="gmRosterLineup"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">ベンチ / 控え</h3>
+            <div id="gmRosterBench"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">FA候補</h3>
+            <div id="gmFreeAgents"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="statsPage" class="page">
+      <div class="section-header">
+        <div>
+          <h2 class="page-title">選手成績一覧</h2>
+          <p class="page-subtitle">リーグ全体 / 自球団の打者成績を横断的に確認</p>
+        </div>
+      </div>
+
+      <div class="stats-stack">
+        <div class="stats-top-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Recorded Days</div>
+            <div id="statsRecordedDaysValue" class="kpi-value">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Teams</div>
+            <div id="statsTeamsValue" class="kpi-value">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Players</div>
+            <div id="statsPlayersValue" class="kpi-value">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Controlled Team</div>
+            <div id="statsCurrentTeamValue" class="kpi-value">-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="stats-filter-grid">
+            <div>
+              <div class="section-note">球団</div>
+              <select id="statsTeamFilter">
+                <option value="all">全球団</option>
+              </select>
+            </div>
+            <div>
+              <div class="section-note">表示範囲</div>
+              <select id="statsScopeFilter">
+                <option value="all">全球団</option>
+                <option value="controlled">自球団のみ</option>
+              </select>
+            </div>
+            <div>
+              <div class="section-note">並び順</div>
+              <select id="statsSortKey">
+                <option value="OPS">OPS</option>
+                <option value="AVG">AVG</option>
+                <option value="OBP">OBP</option>
+                <option value="SLG">SLG</option>
+                <option value="HR">HR</option>
+                <option value="RBI">RBI</option>
+                <option value="H">H</option>
+                <option value="BB">BB</option>
+                <option value="K">K</option>
+                <option value="PA">PA</option>
+              </select>
+            </div>
+            <div>
+              <div class="section-note">検索</div>
+              <input id="statsSearchInput" type="text" placeholder="選手名で検索" />
+            </div>
+            <div>
+              <div class="section-note">最小PA</div>
+              <input id="statsMinPAInput" type="number" min="0" value="0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-main-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">打者成績</h3>
+            <div id="statsPlayersTable"></div>
+          </div>
+          <div class="stats-stack">
+            <div class="card gm-scroll">
+              <h3 class="panel-title">リーダー</h3>
+              <div id="statsLeadersBox"></div>
+            </div>
+            <div class="card gm-scroll">
+              <h3 class="panel-title">球団成績</h3>
+              <div id="statsTeamSummaryTable"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tuningPage" class="page">
+      <div class="section-header">
+        <div>
+          <h2 class="page-title">チューニング</h2>
+          <p class="page-subtitle">本編と独立した sandbox。1球進行、能力編集、複数試合検証用</p>
+        </div>
+      </div>
+
+      <div class="tuning-stack">
+        <div class="card">
+          <div class="toolbar-row">
+            <button id="newGameBtn" class="primary-btn">新しい試合</button>
+            <button id="stepPitchBtn">1球進行</button>
+            <button id="stepPaBtn">1打席進行</button>
+            <button id="halfInningBtn">半イニング進行</button>
+            <button id="playGameBtn">試合終了まで進行</button>
+            <button id="sim10Btn">10試合集計</button>
+            <button id="sim162Btn">162試合集計</button>
+            <button id="resetTuningRosterBtn">sandbox初期化</button>
+          </div>
+        </div>
+
+        <div class="tuning-live-layout">
+          <div class="tuning-stack">
+            <div class="card">
+              <div class="score-strip">
+                <div class="score-strip-team">
+                  <div id="awayName" class="score-strip-name">Away</div>
+                  <div id="awayPitcher" class="score-strip-sub">-</div>
+                </div>
+                <div id="awayScore" class="score-value">0</div>
+                <div class="score-strip-center">
+                  <div class="badge">LIVE</div>
+                  <div id="broadcastInning" class="score-strip-name">1回表</div>
+                  <div id="broadcastStatus" class="score-strip-sub">0アウト・走者なし</div>
+                </div>
+                <div id="homeScore" class="score-value">0</div>
+                <div class="score-strip-team" style="justify-content:flex-end; text-align:right;">
+                  <div>
+                    <div id="homeName" class="score-strip-name">Home</div>
+                    <div id="homePitcher" class="score-strip-sub">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tuning-state-grid">
+              <div class="card">
+                <div class="tuning-section-head">
+                  <div>
+                    <h3 class="panel-title">現在状態</h3>
+                    <div class="tuning-panel-note">試合進行の状態を sandbox 専用ビューで確認する。</div>
+                  </div>
+                </div>
+
+                <div class="tuning-metric-grid">
+                  <div class="tuning-snapshot-card">
+                    <div class="tuning-snapshot-label">Inning</div>
+                    <div id="inningText" class="tuning-snapshot-value">-</div>
+                  </div>
+                  <div class="tuning-snapshot-card">
+                    <div class="tuning-snapshot-label">Outs</div>
+                    <div id="outsText" class="tuning-snapshot-value">-</div>
+                  </div>
+                  <div class="tuning-snapshot-card">
+                    <div class="tuning-snapshot-label">Count</div>
+                    <div id="countText" class="tuning-snapshot-value">-</div>
+                  </div>
+                </div>
+
+                <div class="tuning-snapshot-card" style="margin-top:16px;">
+                  <div class="tuning-snapshot-label">Bases</div>
+                  <div id="basesText" class="tuning-snapshot-value">-</div>
+                  <div class="tuning-runner-list">
+                    <span id="firstRunnerText" class="tuning-runner-chip">一塁走者: なし</span>
+                    <span id="secondRunnerText" class="tuning-runner-chip">二塁走者: なし</span>
+                    <span id="thirdRunnerText" class="tuning-runner-chip">三塁走者: なし</span>
+                  </div>
+                </div>
+
+                <div class="count-stack" style="margin-top:16px;">
+                  <div class="count-group">
+                    <div class="count-group-label">Balls</div>
+                    <div id="ballLights" class="count-lights"></div>
+                  </div>
+                  <div class="count-group">
+                    <div class="count-group-label">Strikes</div>
+                    <div id="strikeLights" class="count-lights"></div>
+                  </div>
+                  <div class="count-group">
+                    <div class="count-group-label">Outs</div>
+                    <div id="outLights" class="count-lights"></div>
+                  </div>
+                  <div class="count-group">
+                    <div class="count-group-label">Bases</div>
+                    <div class="base-diamond">
+                      <span id="headerBase1" class="base"></span>
+                      <span id="headerBase2" class="base"></span>
+                      <span id="headerBase3" class="base"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="tuning-section-head">
+                  <div>
+                    <h3 class="panel-title">打席と投球</h3>
+                    <div class="tuning-panel-note">現在の対戦と直前の投球結果を確認する。</div>
+                  </div>
+                </div>
+
+                <div class="tuning-metric-grid">
+                  <div class="tuning-snapshot-card">
+                    <div class="tuning-snapshot-label">Batter</div>
+                    <div id="currentBatterText" class="tuning-snapshot-value">-</div>
+                  </div>
+                  <div class="tuning-snapshot-card">
+                    <div class="tuning-snapshot-label">Pitcher</div>
+                    <div id="currentPitcherText" class="tuning-snapshot-value">-</div>
+                  </div>
+                  <div class="tuning-snapshot-card">
+                    <div class="tuning-snapshot-label">Live Snapshot</div>
+                    <div id="tuningCurrentScore" class="tuning-snapshot-value">-</div>
+                    <div id="tuningCurrentState" class="tuning-snapshot-sub">-</div>
+                  </div>
+                </div>
+
+                <div class="tuning-zone-panel" style="margin-top:16px;">
+                  <div class="tuning-snapshot-label">Last Pitch</div>
+                  <div id="zoneGrid" class="zone-grid"></div>
+                  <div id="zoneText" class="section-note">-</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3 class="panel-title">実況ログ</h3>
+              <div id="log" class="log-box"></div>
+            </div>
+          </div>
+
+          <div class="tuning-stack">
+            <div class="card gm-scroll">
+              <h3 class="panel-title">ラインアップ</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>先攻</th>
+                    <th>後攻</th>
+                  </tr>
+                </thead>
+                <tbody id="lineupBody"></tbody>
+              </table>
+            </div>
+
+            <div class="card">
+              <div class="tuning-section-head">
+                <div>
+                  <h3 class="panel-title">能力編集</h3>
+                  <div class="tuning-panel-note">sandbox の選手能力のみを書き換える。本編 gmState には影響しない。</div>
+                </div>
+              </div>
+
+              <div class="editor-grid">
+                <div>
+                  <div class="section-note">チーム</div>
+                  <select id="editorSideSelect">
+                    <option value="away">先攻</option>
+                    <option value="home">後攻</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="section-note">対象</div>
+                  <select id="editorPlayerTypeSelect">
+                    <option value="batter">打者</option>
+                    <option value="pitcher">投手</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="section-note">スロット</div>
+                  <select id="editorSlotSelect"></select>
+                </div>
+                <div>
+                  <div class="section-note">名前</div>
+                  <input id="editorNameInput" type="text" />
+                </div>
+                <div>
+                  <div class="section-note">Contact</div>
+                  <input id="editorContactInput" type="number" />
+                </div>
+                <div>
+                  <div class="section-note">Power</div>
+                  <input id="editorPowerInput" type="number" />
+                </div>
+                <div>
+                  <div class="section-note">Eye</div>
+                  <input id="editorEyeInput" type="number" />
+                </div>
+                <div>
+                  <div class="section-note">Control</div>
+                  <input id="editorControlInput" type="number" />
+                </div>
+                <div>
+                  <div class="section-note">Stuff</div>
+                  <input id="editorStuffInput" type="number" />
+                </div>
+              </div>
+
+              <div class="toolbar-row" style="margin-top:16px;">
+                <button id="reloadEditorBtn">再読込</button>
+                <button id="applyPlayerEditBtn" class="primary-btn">反映して新試合作成</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tuning-analysis-grid">
+          <div class="card gm-scroll">
+            <div class="tuning-section-head">
+              <div>
+                <h3 class="panel-title">現在試合チーム集計</h3>
+                <div class="tuning-panel-note">この試合だけの集計値。</div>
+              </div>
+            </div>
+            <div id="tuningGameSummaryTable"></div>
+          </div>
+
+          <div class="card gm-scroll">
+            <div class="tuning-section-head">
+              <div>
+                <h3 class="panel-title">現在試合QoC</h3>
+                <div class="tuning-panel-note">当該試合で発生した打球品質の内訳。</div>
+              </div>
+            </div>
+            <div id="tuningAwayQoCTable"></div>
+            <div style="height:12px;"></div>
+            <div id="tuningHomeQoCTable"></div>
+          </div>
+        </div>
+
+        <div class="tuning-analysis-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">先攻打者成績</h3>
+            <div id="tuningAwayPlayerStatsTable"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">後攻打者成績</h3>
+            <div id="tuningHomePlayerStatsTable"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="tuning-section-head">
+            <div>
+              <h3 class="panel-title">シーズン検証</h3>
+              <div class="tuning-panel-note">sandbox で回した複数試合の集計結果。</div>
+            </div>
+            <div>
+              <div id="tuningSeasonHeadline" class="tuning-snapshot-value">シーズン結果</div>
+            </div>
+          </div>
+
+          <div class="tuning-season-header">
+            <div class="tuning-snapshot-card">
+              <div class="tuning-snapshot-label">Games</div>
+              <div id="tuningSeasonGamesValue" class="tuning-snapshot-value">-</div>
+            </div>
+            <div class="tuning-snapshot-card">
+              <div class="tuning-snapshot-label">Record</div>
+              <div id="tuningSeasonRecordValue" class="tuning-snapshot-value">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tuning-analysis-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">シーズンチーム集計</h3>
+            <div id="tuningSeasonSummaryTable"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">シーズンQoC</h3>
+            <div id="tuningSeasonAwayQoCTable"></div>
+            <div style="height:12px;"></div>
+            <div id="tuningSeasonHomeQoCTable"></div>
+          </div>
+        </div>
+
+        <div class="tuning-analysis-grid">
+          <div class="card gm-scroll">
+            <h3 class="panel-title">先攻シーズン打者成績</h3>
+            <div id="tuningSeasonAwayPlayerStatsTable"></div>
+          </div>
+          <div class="card gm-scroll">
+            <h3 class="panel-title">後攻シーズン打者成績</h3>
+            <div id="tuningSeasonHomePlayerStatsTable"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
