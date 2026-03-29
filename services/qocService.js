@@ -1,4 +1,8 @@
-import { QOC_KEYS, getQoCWeightsByCourse } from "../config/qocConfig.js";
+import {
+  QOC_KEYS,
+  getQoCWeightsByCourse,
+  getQoCTuning,
+} from "../config/qocConfig.js";
 import { getPitchTypeAdjustments } from "../config/pitchConfig.js";
 
 function random() {
@@ -33,28 +37,38 @@ export function buildQoCWeights(batter, course, pitchType) {
   const contactFactor = calcContactFactor(batter?.ratings?.contact || 50);
   const pitchAdj = getPitchTypeAdjustments(pitchType);
   const base = getQoCWeightsByCourse(course);
+  const tuning = getQoCTuning();
 
-  return {
-    Weak: Math.max(0.001, base.Weak + (pitchAdj.weak || 0) - contactFactor * 0.015),
-    Topped: Math.max(0.001, base.Topped + (pitchAdj.topped || 0) - powerFactor * 0.01),
-    Under: Math.max(0.001, base.Under + (pitchAdj.under || 0) - contactFactor * 0.01),
-    Flare: Math.max(0.001, base.Flare + (pitchAdj.flare || 0) + contactFactor * 0.01),
-    Solid: Math.max(
-      0.001,
-      base.Solid + (pitchAdj.solid || 0) + contactFactor * 0.012 + powerFactor * 0.008
-    ),
-    Barrel: Math.max(0.001, base.Barrel + (pitchAdj.barrel || 0) + powerFactor * 0.02),
-  };
+  const weights = {};
+
+  for (const key of QOC_KEYS) {
+    const baseValue = base[key] ?? 0;
+    const pitchValue = pitchAdj[key.toLowerCase()] || 0;
+    const contactValue = (tuning.contactEffects[key] || 0) * contactFactor;
+    const powerValue = (tuning.powerEffects[key] || 0) * powerFactor;
+
+    weights[key] = Math.max(
+      tuning.minWeight,
+      baseValue + pitchValue + contactValue + powerValue
+    );
+  }
+
+  return weights;
 }
 
 export function chooseQoC(batter, course, pitchType) {
-  const normalized = normalizeWeights(buildQoCWeights(batter, course, pitchType));
-  const roll = random();
+  const normalized = normalizeWeights(
+    buildQoCWeights(batter, course, pitchType)
+  );
 
+  const roll = random();
   let cumulative = 0;
+
   for (const key of QOC_KEYS) {
     cumulative += normalized[key];
-    if (roll <= cumulative) return key;
+    if (roll <= cumulative) {
+      return key;
+    }
   }
 
   return "Topped";
