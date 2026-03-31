@@ -4,7 +4,7 @@ import {
   sortPlayerRows,
   filterPlayerRows,
   getLeader,
-} from "./statsEngine.js";
+} from "../statsEngine.js";
 
 function safeNum(value, fallback = 0) {
   const num = Number(value);
@@ -17,11 +17,11 @@ function to3(value) {
 
 function buildPlayerStatsTable(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return '<div class="empty-note">まだリーグ選手成績がありません。</div>';
+    return `<div class="empty-note">まだリーグ選手成績がありません。</div>`;
   }
 
   return `
-    <table>
+    <table class="stats-table">
       <thead>
         <tr>
           <th>#</th>
@@ -76,11 +76,11 @@ function buildPlayerStatsTable(rows) {
 
 function buildTeamSummaryTable(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return '<div class="empty-note">まだリーグチーム成績がありません。</div>';
+    return `<div class="empty-note">まだリーグチーム成績がありません。</div>`;
   }
 
   return `
-    <table>
+    <table class="stats-table">
       <thead>
         <tr>
           <th>球団</th>
@@ -123,7 +123,7 @@ function buildTeamSummaryTable(rows) {
 
 function buildLeadersBox(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return '<div class="empty-note">ハイライト対象がありません。</div>';
+    return `<div class="empty-note">ハイライト対象がありません。</div>`;
   }
 
   const opsLeader = getLeader(rows, "OPS");
@@ -131,22 +131,22 @@ function buildLeadersBox(rows) {
   const avgLeader = getLeader(rows.filter((row) => safeNum(row.stats.PA) > 0), "AVG");
 
   return `
-    <div class="stats-stack">
-      <div class="summary-card">
-        <div class="summary-label">OPS Leader</div>
-        <div class="summary-value">${opsLeader ? opsLeader.name : "-"}</div>
-        <div class="summary-sub">${opsLeader ? `${opsLeader.teamName} / OPS ${to3(opsLeader.OPS)}` : "-"}</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">HR Leader</div>
-        <div class="summary-value">${hrLeader ? hrLeader.name : "-"}</div>
-        <div class="summary-sub">${hrLeader ? `${hrLeader.teamName} / HR ${safeNum(hrLeader.stats.HR)}` : "-"}</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-label">AVG Leader</div>
-        <div class="summary-value">${avgLeader ? avgLeader.name : "-"}</div>
-        <div class="summary-sub">${avgLeader ? `${avgLeader.teamName} / AVG ${to3(avgLeader.AVG)}` : "-"}</div>
-      </div>
+    <div class="leaders-grid">
+      <article class="leader-card">
+        <h4>OPS Leader</h4>
+        <strong>${opsLeader ? opsLeader.name : "-"}</strong>
+        <p>${opsLeader ? `${opsLeader.teamName} / OPS ${to3(opsLeader.OPS)}` : "-"}</p>
+      </article>
+      <article class="leader-card">
+        <h4>HR Leader</h4>
+        <strong>${hrLeader ? hrLeader.name : "-"}</strong>
+        <p>${hrLeader ? `${hrLeader.teamName} / HR ${safeNum(hrLeader.stats.HR)}` : "-"}</p>
+      </article>
+      <article class="leader-card">
+        <h4>AVG Leader</h4>
+        <strong>${avgLeader ? avgLeader.name : "-"}</strong>
+        <p>${avgLeader ? `${avgLeader.teamName} / AVG ${to3(avgLeader.AVG)}` : "-"}</p>
+      </article>
     </div>
   `;
 }
@@ -159,7 +159,7 @@ export function renderStatsPage(dom, statsIndex, controlledTeamName, statsPageSt
   if (dom.statsTeamFilter) {
     const currentTeam = dom.statsTeamFilter.value || statsPageState.filters.team || "all";
     dom.statsTeamFilter.innerHTML = [
-      '<option value="all">全チーム</option>',
+      `<option value="all">全チーム</option>`,
       ...teamNames.map((name) => `<option value="${name}">${name}</option>`),
     ].join("");
     dom.statsTeamFilter.value = teamNames.includes(currentTeam) ? currentTeam : "all";
@@ -172,14 +172,19 @@ export function renderStatsPage(dom, statsIndex, controlledTeamName, statsPageSt
   statsPageState.filters.minPA = safeNum(dom.statsMinPAInput?.value, 0);
 
   let filteredPlayers = filterPlayerRows(playerRows, statsPageState.filters);
+
   if (statsPageState.filters.scope === "controlled") {
     filteredPlayers = filteredPlayers.filter((row) => row.teamName === controlledTeamName);
   }
+
   const sortedPlayers = sortPlayerRows(filteredPlayers, statsPageState.filters.sortKey);
 
   let filteredTeams = teamRows.filter(
-    (row) => statsPageState.filters.team === "all" || row.teamName === statsPageState.filters.team
+    (row) =>
+      statsPageState.filters.team === "all" ||
+      row.teamName === statsPageState.filters.team
   );
+
   if (statsPageState.filters.scope === "controlled") {
     filteredTeams = filteredTeams.filter((row) => row.teamName === controlledTeamName);
   }

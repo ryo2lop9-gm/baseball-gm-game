@@ -4,7 +4,7 @@ import {
   createGMState,
   createFreeAgentFromPlayer,
 } from "../gmEngine.js";
-import { createAppState } from "../appState.js";
+import { createAppState } from "../state/appState.js";
 import { createStatsIndex } from "../statsEngine.js";
 
 function createBenchSeedPlayers() {
@@ -64,7 +64,6 @@ export function createGMDeskFactory() {
       initialBudget: 8000,
       rounds: 6,
     });
-
     return seedGMStateDepth(initial);
   }
 

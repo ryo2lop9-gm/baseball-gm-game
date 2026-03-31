@@ -16,7 +16,7 @@ import {
   setGMState,
   setTuningState,
   setTuningSeasonSummary,
-} from "./appState.js";
+} from "./state/appState.js";
 
 const STORAGE_KEY = "baseball-gm-prototype-save";
 const STORAGE_VERSION = 1;

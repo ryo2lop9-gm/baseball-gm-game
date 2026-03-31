@@ -1,5 +1,5 @@
 import { getStatsDom } from "./statsDom.js";
-import { renderStatsPage } from "../statsRender.js";
+import { renderStatsPage } from "../render/statsRender.js";
 
 export function createStatsPageController({
   getAppState,
@@ -32,7 +32,6 @@ export function createStatsPageController({
     state.filters.sortKey = dom.statsSortKey?.value || "OPS";
     state.filters.search = dom.statsSearchInput?.value || "";
     state.filters.minPA = Number(dom.statsMinPAInput?.value || 0);
-
     render();
   }
 

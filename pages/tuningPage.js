@@ -19,7 +19,7 @@ import {
   clearLog,
   renderTuningGameTables,
   renderTuningSeasonTables,
-} from "../tuningRender.js";
+} from "../render/tuningRender.js";
 
 export function createTuningPageController({
   getAppState,
@@ -55,7 +55,6 @@ export function createTuningPageController({
 
   function renderFullLog() {
     clearLog(dom);
-
     const lines = Array.isArray(getTuningState().presentation?.log)
       ? getTuningState().presentation.log
       : [];
@@ -75,7 +74,6 @@ export function createTuningPageController({
     if (!dom.log || !Array.isArray(getTuningState().presentation?.log)) return;
 
     const lines = getTuningState().presentation.log;
-
     for (let i = lastRenderedLogIndex; i < lines.length; i += 1) {
       appendLog(dom, lines[i]);
     }
@@ -105,7 +103,6 @@ export function createTuningPageController({
 
   function pushFinishedGameNote() {
     const state = getTuningState();
-
     if (!Array.isArray(state.presentation?.log)) return;
 
     const next = structuredClone(state);
@@ -156,7 +153,6 @@ export function createTuningPageController({
 
     while (!next.isComplete) {
       next = simulateNextPitch(next);
-
       if (next.isComplete) break;
       if (next.inning !== startInning || next.half !== startHalf) break;
     }
@@ -222,7 +218,6 @@ export function createTuningPageController({
       setAppTuningSeasonSummary(null);
       prepareFreshTuningGame();
     });
-
     dom.stepPitchBtn?.addEventListener("click", stepOnePitch);
     dom.stepPaBtn?.addEventListener("click", stepOnePlateAppearance);
     dom.halfInningBtn?.addEventListener("click", stepHalfInning);
@@ -230,7 +225,6 @@ export function createTuningPageController({
     dom.sim10Btn?.addEventListener("click", () => runSeasonSimulation(10));
     dom.sim162Btn?.addEventListener("click", () => runSeasonSimulation(162));
     dom.resetTuningRosterBtn?.addEventListener("click", resetSandboxRoster);
-
     dom.editorSideSelect?.addEventListener("change", refreshEditorForm);
     dom.editorPlayerTypeSelect?.addEventListener("change", refreshEditorForm);
     dom.editorSlotSelect?.addEventListener("change", refreshEditorForm);

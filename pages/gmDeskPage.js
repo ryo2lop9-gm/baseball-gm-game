@@ -10,7 +10,7 @@ import {
   createStatsIndex,
   ingestLastDayResults,
 } from "../statsEngine.js";
-import { renderGMPage } from "../gmRender.js";
+import { renderGMPage } from "../render/gmRender.js";
 
 export function createGMDeskPageController({
   getAppState,
@@ -51,9 +51,7 @@ export function createGMDeskPageController({
 
     for (let i = 0; i < days; i += 1) {
       const advanced = advanceGMDay(next);
-      const progressed =
-        advanced.day !== next.day || advanced.isComplete !== next.isComplete;
-
+      const progressed = advanced.day !== next.day || advanced.isComplete !== next.isComplete;
       next = advanced;
 
       const results = getLastDayResults(next);
@@ -70,7 +68,12 @@ export function createGMDeskPageController({
       }
     }
 
-    next = appendGMInboxNote(next, "GMデスク", createProgressNote(beforeDay, next), "system");
+    next = appendGMInboxNote(
+      next,
+      "GMデスク",
+      createProgressNote(beforeDay, next),
+      "system"
+    );
 
     setAppGMState(next);
     setStatsIndex(nextStatsIndex);
@@ -104,8 +107,8 @@ export function createGMDeskPageController({
 
     const decisionId = button.dataset.decisionId;
     const actionKey = button.dataset.actionKey;
-
     const next = resolveDecisionCard(getGMState(), decisionId, actionKey);
+
     setAppGMState(next);
     render();
   }
