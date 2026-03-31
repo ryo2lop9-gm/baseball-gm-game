@@ -4,7 +4,7 @@ import {
   getPendingDecisions,
   getLastDayResults,
   getTransactions,
-} from "../gmEngine.js";
+} from "../engine/gm/gmEngine.js";
 
 function safeNum(value, fallback = 0) {
   const num = Number(value);

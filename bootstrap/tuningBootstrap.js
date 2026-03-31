@@ -3,7 +3,7 @@ import { createInitialGameState } from "../state/gameState.js";
 import {
   createRosterState,
   buildTeamFromRoster,
-} from "../rosterEngine.js";
+} from "../engine/gm/rosterEngine.js";
 
 export function createTuningBootstrap() {
   function createDefaultRosterBundle() {

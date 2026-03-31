@@ -3,7 +3,7 @@ import { createGameBatter, createGamePitcher } from "../models/playerModels.js";
 import {
   createGMState,
   createFreeAgentFromPlayer,
-} from "../gmEngine.js";
+} from "../engine/gm/gmEngine.js";
 import { createAppState } from "../state/appState.js";
 import { createStatsIndex } from "../engine/stats/statsEngine.js";
 

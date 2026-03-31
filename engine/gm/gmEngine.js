@@ -2,17 +2,17 @@ import {
   createLeagueState,
   advanceLeagueDay,
   getLeagueStandingsTable,
-} from "./engine/game/leagueEngine.js";
+} from "../game/leagueEngine.js";
 import {
   createRosterState,
   buildTeamFromRoster,
 } from "./rosterEngine.js";
 import {
   generateDailyDecisionCards,
-} from "./eventEngine.js";
-import { GM_CONFIG } from "./config/gmConfig.js";
-import { calcSimplePlayerValue } from "./services/playerValueService.js";
-import { calcSuggestedSalary, recalcBudgetState } from "./services/contractService.js";
+} from "../core/eventEngine.js";
+import { GM_CONFIG } from "../../config/gmConfig.js";
+import { calcSimplePlayerValue } from "../../services/playerValueService.js";
+import { calcSuggestedSalary, recalcBudgetState } from "../../services/contractService.js";
 import {
   prependInboxMessage,
   addDecisionCardsToInbox,

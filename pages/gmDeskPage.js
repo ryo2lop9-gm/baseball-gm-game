@@ -5,7 +5,7 @@ import {
   resolveDecisionCard,
   getLastDayResults,
   appendGMInboxNote,
-} from "../gmEngine.js";
+} from "../engine/gm/gmEngine.js";
 import {
   createStatsIndex,
   ingestLastDayResults,

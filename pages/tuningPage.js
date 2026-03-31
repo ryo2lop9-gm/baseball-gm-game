@@ -10,7 +10,7 @@ import {
   getSelectedEditableEntity,
   loadEditorFormFromEntity,
   applyEditorFormToRoster,
-} from "../editorEngine.js";
+} from "../engine/gm/editorEngine.js";
 import {
   renderGameCore,
   renderPitchPresentation,

@@ -1,12 +1,12 @@
 import {
   calcSimplePlayerValue,
   getPlayerExpectedValue,
-} from "./services/playerValueService.js";
+} from "../../services/playerValueService.js";
 import {
   pickWeakestLineupPlayer,
   pickBestBenchBatter,
   pickBestFreeAgent,
-} from "./services/rosterDecisionService.js";
+} from "../../services/rosterDecisionService.js";
 
 export const GM_DECISION_TYPES = Object.freeze({
   TRADE_OFFER: "trade_offer",
