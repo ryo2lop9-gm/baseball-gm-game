@@ -2,7 +2,7 @@ import {
   createLeagueState,
   advanceLeagueDay,
   getLeagueStandingsTable,
-} from "./leagueEngine.js";
+} from "./engine/game/leagueEngine.js";
 import {
   createRosterState,
   buildTeamFromRoster,

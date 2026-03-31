@@ -1,8 +1,8 @@
-import { createInitialSimState } from "./gameState.js";
+import { createInitialSimState } from "../../gameState.js";
 import {
   simulateGameMutable,
   createFastSimulationOptions,
-} from "./engineCore.js";
+} from "../../engineCore.js";
 
 /**
  * leagueEngine.js の責務
