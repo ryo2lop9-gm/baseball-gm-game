@@ -1,5 +1,5 @@
 import { createDefaultTeams } from "../models/teamModels.js";
-import { createInitialGameState } from "../gameState.js";
+import { createInitialGameState } from "../state/gameState.js";
 import {
   createRosterState,
   buildTeamFromRoster,

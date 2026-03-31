@@ -1,11 +1,11 @@
-import { getPitchTypeAdjustments, getPitchTypeLabel } from "./config/pitchConfig.js";
-import { getHitTypeProbabilities } from "./config/hitOutcomeConfig.js";
-import { chooseQoC } from "./services/qocService.js";
-import { chooseZoneSpot } from "./services/zoneService.js";
+import { getPitchTypeAdjustments, getPitchTypeLabel } from "../../config/pitchConfig.js";
+import { getHitTypeProbabilities } from "../../config/hitOutcomeConfig.js";
+import { chooseQoC } from "../../services/qocService.js";
+import { chooseZoneSpot } from "../../services/zoneService.js";
 import {
   chooseCourse,
   calcPitchOutcomeProbabilities,
-} from "./services/pitchOutcomeService.js";
+} from "../../services/pitchOutcomeService.js";
 
 /**
  * engineCore.js の責務
