@@ -123,7 +123,7 @@ export function createGMState(leagueTeams, options = {}) {
 
   const roster = createRosterState(controlledTeam);
 
-  const state = {
+  let state = {
     controlledTeamName,
     day: 1,
     isComplete: false,
@@ -141,7 +141,7 @@ export function createGMState(leagueTeams, options = {}) {
     transactions: [],
   };
 
-  recalcBudget(state);
+  state = recalcBudget(state);
   state.standings = createStandingsSnapshot(state.league);
 
   prependInboxMessage(
@@ -175,7 +175,6 @@ export function advanceGMDay(prevGMState) {
   }
 
   next = syncControlledTeamIntoLeague(next);
-
   next.league = advanceLeagueDay(next.league);
   next.day += 1;
   next.isComplete = next.league.isComplete;

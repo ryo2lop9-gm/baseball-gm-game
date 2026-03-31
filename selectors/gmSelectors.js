@@ -1,23 +1,27 @@
-import {
-  getGMStandings,
-  getGMInbox,
-  getPendingDecisions,
-  getLastDayResults,
-  getTransactions,
-} from "../engine/gm/gmEngine.js";
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function asNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
 
 export function buildGMViewModel(gmState) {
-  const pendingCards = getPendingDecisions(gmState);
-  const inbox = getGMInbox(gmState);
-  const standings = getGMStandings(gmState);
-  const lastResults = getLastDayResults(gmState);
-  const transactions = getTransactions(gmState);
+  const roster = gmState?.roster || {};
+  const budget = gmState?.budget || {};
+  const pendingCards = asArray(gmState?.pendingDecisions);
+  const inbox = asArray(gmState?.inbox);
+  const standings = asArray(gmState?.standings);
+  const lastResults = asArray(gmState?.league?.lastDayResults);
+  const transactions = asArray(gmState?.transactions);
+  const controlledTeamName = gmState?.controlledTeamName || "-";
 
   return {
-    controlledTeamName: gmState?.controlledTeamName || "-",
-    day: Number(gmState?.day || 0),
-    budgetCash: Number(gmState?.budget?.cash || 0),
-    budgetPayroll: Number(gmState?.budget?.payroll || 0),
+    controlledTeamName,
+    day: asNumber(gmState?.day, 0),
+    budgetCash: asNumber(budget.cash, 0),
+    budgetPayroll: asNumber(budget.payroll, 0),
     pendingCount: pendingCards.length,
     statusText: pendingCards.length > 0 ? "判断待ち" : "進行可能",
     statusClass: pendingCards.length > 0 ? "warning" : "ok",
@@ -28,8 +32,8 @@ export function buildGMViewModel(gmState) {
     lastResults,
     transactions,
 
-    rosterLineup: gmState?.roster?.lineup || [],
-    rosterBench: gmState?.roster?.bench || [],
-    freeAgents: gmState?.freeAgents || [],
+    rosterLineup: asArray(roster.lineup),
+    rosterBench: asArray(roster.bench),
+    freeAgents: asArray(gmState?.freeAgents),
   };
 }

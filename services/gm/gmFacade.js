@@ -11,11 +11,14 @@ import {
 } from "../../engine/stats/statsEngine.js";
 
 function createProgressNote(beforeDay, afterState) {
-  const pending = getPendingDecisions(afterState).length;
-  const progressed = Math.max(0, Number(afterState?.day || 0) - Number(beforeDay || 0));
+  const pendingCount = Array.isArray(afterState?.pendingDecisions)
+    ? afterState.pendingDecisions.length
+    : 0;
+  const currentDay = Number(afterState?.day || 0);
+  const progressed = Math.max(0, currentDay - Number(beforeDay || 0));
 
-  if (pending > 0) {
-    return `Day ${Math.max(0, Number(afterState?.day || 0) - 1)} の処理後に ${pending} 件の判断待ちが発生しました。`;
+  if (pendingCount > 0) {
+    return `Day ${Math.max(0, currentDay - 1)} の処理後に ${pendingCount} 件の判断待ちが発生しました。`;
   }
 
   if (progressed <= 0) {
@@ -36,7 +39,8 @@ export function advanceGMDesk({ gmState, statsIndex, days }) {
   for (let i = 0; i < safeDays; i += 1) {
     const advanced = advanceGMDay(nextGMState);
     const progressed =
-      advanced.day !== nextGMState.day || advanced.isComplete !== nextGMState.isComplete;
+      advanced.day !== nextGMState.day ||
+      advanced.isComplete !== nextGMState.isComplete;
 
     nextGMState = advanced;
 
@@ -46,7 +50,11 @@ export function advanceGMDesk({ gmState, statsIndex, days }) {
       statsChanged = true;
     }
 
-    if (!progressed || getPendingDecisions(nextGMState).length > 0 || nextGMState.isComplete) {
+    if (
+      !progressed ||
+      getPendingDecisions(nextGMState).length > 0 ||
+      nextGMState.isComplete
+    ) {
       break;
     }
   }

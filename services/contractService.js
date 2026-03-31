@@ -14,13 +14,23 @@ export function calcRosterPayroll(rosterState) {
   const bench = rosterState?.bench || [];
   const rotation = rosterState?.rotation || [];
   const bullpen = rosterState?.bullpen || [];
-
   const players = [...lineup, ...bench, ...rotation, ...bullpen];
+
   return players.reduce((sum, player) => sum + calcSuggestedSalary(player), 0);
 }
 
 export function recalcBudgetState(gmState) {
-  gmState.budget.payroll = calcRosterPayroll(gmState.roster);
-  gmState.budget.cash = Math.max(0, gmState.budget.total - gmState.budget.payroll);
-  return gmState;
+  const payroll = calcRosterPayroll(gmState?.roster || {});
+  const total = Number(gmState?.budget?.total || 0);
+  const currentBudget = gmState?.budget || {};
+
+  return {
+    ...gmState,
+    budget: {
+      ...currentBudget,
+      total,
+      payroll,
+      cash: Math.max(0, total - payroll),
+    },
+  };
 }

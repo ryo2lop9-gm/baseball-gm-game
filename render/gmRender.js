@@ -84,7 +84,7 @@ function buildPendingCardsHtml(cards) {
                     data-decision-id="${escapeHtml(card.id || "")}"
                     data-action-key="${escapeHtml(option.actionKey || "")}"
                   >
-                    ${escapeHtml(option.label)}
+                    ${escapeHtml(option.label || "")}
                   </button>
                 `
               )
@@ -274,10 +274,10 @@ function buildFreeAgentHtml(players) {
           .map(
             (player) => `
               <tr>
-                <td>${escapeHtml(player.name)}</td>
-                <td>${escapeHtml(player.type)}</td>
-                <td>${formatMoney(player.contractCost)}</td>
-                <td>${safeNum(player.expectedValue)}</td>
+                <td>${escapeHtml(player?.name || "-")}</td>
+                <td>${escapeHtml(player?.type || "-")}</td>
+                <td>${formatMoney(player?.contractCost || 0)}</td>
+                <td>${safeNum(player?.expectedValue)}</td>
               </tr>
             `
           )
