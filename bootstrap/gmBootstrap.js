@@ -1,11 +1,11 @@
-import { createDefaultLeagueTeams } from "../teamModels.js";
-import { createGameBatter, createGamePitcher } from "../playerModels.js";
+import { createDefaultLeagueTeams } from "../models/teamModels.js";
+import { createGameBatter, createGamePitcher } from "../models/playerModels.js";
 import {
   createGMState,
   createFreeAgentFromPlayer,
 } from "../gmEngine.js";
 import { createAppState } from "../state/appState.js";
-import { createStatsIndex } from "../statsEngine.js";
+import { createStatsIndex } from "../engine/stats/statsEngine.js";
 
 function createBenchSeedPlayers() {
   return [

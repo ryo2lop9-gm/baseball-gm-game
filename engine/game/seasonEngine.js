@@ -1,8 +1,8 @@
-import { createInitialSimState } from "./gameState.js";
+import { createInitialSimState } from "../../gameState.js";
 import {
   simulateGameMutable,
   createFastSimulationOptions,
-} from "./engineCore.js";
+} from "../../engineCore.js";
 
 function emptyQoC() {
   return {

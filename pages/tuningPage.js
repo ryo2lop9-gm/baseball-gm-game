@@ -3,8 +3,8 @@ import {
   simulateGame,
   simulateNextPitch,
   simulateNextPlateAppearance,
-} from "../gameEngine.js";
-import { simulateSeason } from "../seasonEngine.js";
+} from "../engine/game/gameEngine.js";
+import { simulateSeason } from "../engine/game/seasonEngine.js";
 import {
   fillEditorSlotOptions,
   getSelectedEditableEntity,

@@ -9,7 +9,7 @@ import {
 import {
   createStatsIndex,
   ingestLastDayResults,
-} from "../statsEngine.js";
+} from "../engine/stats/statsEngine.js";
 import { renderGMPage } from "../render/gmRender.js";
 
 export function createGMDeskPageController({

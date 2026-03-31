@@ -4,7 +4,7 @@ import {
   sortPlayerRows,
   filterPlayerRows,
   getLeader,
-} from "../statsEngine.js";
+} from "../engine/stats/statsEngine.js";
 
 function safeNum(value, fallback = 0) {
   const num = Number(value);

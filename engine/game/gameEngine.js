@@ -1,11 +1,11 @@
 import {
   stepPitchMutable,
   simulateGameMutable,
-} from "./engineCore.js";
+} from "../../engineCore.js";
 import {
   createPresentationCallbacks,
   syncPresentationFromRuntime,
-} from "./presentationEngine.js";
+} from "../../presentationEngine.js";
 
 /**
  * visible game 専用:
