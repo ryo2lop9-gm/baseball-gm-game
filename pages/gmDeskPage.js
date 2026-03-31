@@ -1,16 +1,11 @@
 import { getGMDeskDom } from "./gmDeskDom.js";
-import {
-  advanceGMDay,
-  getPendingDecisions,
-  resolveDecisionCard,
-  getLastDayResults,
-  appendGMInboxNote,
-} from "../engine/gm/gmEngine.js";
-import {
-  createStatsIndex,
-  ingestLastDayResults,
-} from "../engine/stats/statsEngine.js";
 import { renderGMPage } from "../render/gmRender.js";
+import { buildGMViewModel } from "../selectors/gmSelectors.js";
+import {
+  advanceGMDesk,
+  startNewGMSeason,
+  resolveGMDecision,
+} from "../services/gm/gmFacade.js";
 
 export function createGMDeskPageController({
   getAppState,
@@ -26,78 +21,43 @@ export function createGMDeskPageController({
   }
 
   function render() {
-    renderGMPage(dom, getGMState());
+    const viewModel = buildGMViewModel(getGMState());
+    renderGMPage(dom, viewModel);
   }
 
-  function createProgressNote(beforeDay, afterState) {
-    const pending = getPendingDecisions(afterState).length;
-    const progressed = Math.max(0, afterState.day - beforeDay);
-
-    if (pending > 0) {
-      return `Day ${afterState.day - 1} の処理後に ${pending} 件の判断待ちが発生しました。`;
+  function notifyStatsChanged(callbacks) {
+    if (typeof callbacks?.onStatsChanged === "function") {
+      callbacks.onStatsChanged();
     }
-
-    if (progressed <= 0) {
-      return "これ以上進める日程がありません。";
-    }
-
-    return `${progressed} 日進行しました。`;
   }
 
   function handleAdvance(days, callbacks = {}) {
-    const beforeDay = getGMState().day;
-    let next = getGMState();
-    let nextStatsIndex = getStatsIndex();
+    const result = advanceGMDesk({
+      gmState: getGMState(),
+      statsIndex: getStatsIndex(),
+      days,
+    });
 
-    for (let i = 0; i < days; i += 1) {
-      const advanced = advanceGMDay(next);
-      const progressed = advanced.day !== next.day || advanced.isComplete !== next.isComplete;
-      next = advanced;
-
-      const results = getLastDayResults(next);
-      if (results.length > 0) {
-        nextStatsIndex = ingestLastDayResults(nextStatsIndex, results);
-      }
-
-      if (
-        !progressed ||
-        getPendingDecisions(next).length > 0 ||
-        next.isComplete
-      ) {
-        break;
-      }
-    }
-
-    next = appendGMInboxNote(
-      next,
-      "GMデスク",
-      createProgressNote(beforeDay, next),
-      "system"
-    );
-
-    setAppGMState(next);
-    setStatsIndex(nextStatsIndex);
+    setAppGMState(result.gmState);
+    setStatsIndex(result.statsIndex);
     render();
 
-    if (typeof callbacks.onStatsChanged === "function") {
-      callbacks.onStatsChanged();
+    if (result.statsChanged) {
+      notifyStatsChanged(callbacks);
     }
   }
 
   function handleNewSeason(callbacks = {}) {
-    const fresh = appendGMInboxNote(
-      createFreshGMDesk(),
-      "GMデスク",
-      "新しいGMシーズンを開始しました。",
-      "system"
-    );
+    const result = startNewGMSeason({
+      createFreshGMDesk,
+    });
 
-    setAppGMState(fresh);
-    setStatsIndex(createStatsIndex());
+    setAppGMState(result.gmState);
+    setStatsIndex(result.statsIndex);
     render();
 
-    if (typeof callbacks.onStatsChanged === "function") {
-      callbacks.onStatsChanged();
+    if (result.statsChanged) {
+      notifyStatsChanged(callbacks);
     }
   }
 
@@ -107,9 +67,14 @@ export function createGMDeskPageController({
 
     const decisionId = button.dataset.decisionId;
     const actionKey = button.dataset.actionKey;
-    const next = resolveDecisionCard(getGMState(), decisionId, actionKey);
 
-    setAppGMState(next);
+    const result = resolveGMDecision({
+      gmState: getGMState(),
+      decisionId,
+      actionKey,
+    });
+
+    setAppGMState(result.gmState);
     render();
   }
 

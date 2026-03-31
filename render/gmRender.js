@@ -1,11 +1,3 @@
-import {
-  getGMStandings,
-  getGMInbox,
-  getPendingDecisions,
-  getLastDayResults,
-  getTransactions,
-} from "../engine/gm/gmEngine.js";
-
 function safeNum(value, fallback = 0) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
@@ -13,12 +5,6 @@ function safeNum(value, fallback = 0) {
 
 function formatMoney(value) {
   return `$${Number(value || 0).toLocaleString()}`;
-}
-
-function badgeClass(style) {
-  if (style === "positive") return "positive";
-  if (style === "negative") return "negative";
-  return "neutral";
 }
 
 function escapeHtml(value) {
@@ -60,29 +46,43 @@ function inboxTypeLabel(type) {
   }
 }
 
+function transactionLabel(type) {
+  switch (type) {
+    case "sign":
+      return "FA契約";
+    case "trade":
+      return "トレード";
+    case "upgrade_lineup":
+      return "昇格";
+    default:
+      return "取引";
+  }
+}
+
 function buildPendingCardsHtml(cards) {
   if (!cards.length) {
-    return `<div class="empty-note">現在、判断待ちカードはありません。</div>`;
+    return `
+      <div class="empty-state">
+        現在、判断待ちカードはありません。
+      </div>
+    `;
   }
 
   return cards
     .map(
       (card) => `
-        <article class="decision-card">
-          <div class="decision-card-head">
-            <span class="decision-type">${escapeHtml(decisionTypeLabel(card.type))}</span>
-          </div>
-          <h4>${escapeHtml(card.title || "Decision")}</h4>
-          <p>${escapeHtml(card.body || "")}</p>
-          <div class="decision-actions">
+        <article class="gm-card">
+          <div class="gm-card__type">${escapeHtml(decisionTypeLabel(card.type))}</div>
+          <h4 class="gm-card__title">${escapeHtml(card.title || "Decision")}</h4>
+          <p class="gm-card__body">${escapeHtml(card.body || "")}</p>
+          <div class="gm-card__actions">
             ${(card.options || [])
               .map(
                 (option) => `
                   <button
                     type="button"
-                    class="decision-btn ${badgeClass(option.style)}"
-                    data-decision-id="${escapeHtml(card.id)}"
-                    data-action-key="${escapeHtml(option.actionKey)}"
+                    data-decision-id="${escapeHtml(card.id || "")}"
+                    data-action-key="${escapeHtml(option.actionKey || "")}"
                   >
                     ${escapeHtml(option.label)}
                   </button>
@@ -98,18 +98,22 @@ function buildPendingCardsHtml(cards) {
 
 function buildInboxHtml(messages) {
   if (!messages.length) {
-    return `<div class="empty-note">まだメッセージがありません。</div>`;
+    return `
+      <div class="empty-state">
+        まだメッセージがありません。
+      </div>
+    `;
   }
 
   return messages
     .map(
       (message) => `
         <article class="inbox-item">
-          <div class="inbox-item-head">
+          <div class="inbox-item__meta">
             <strong>${escapeHtml(message.title || "Inbox")}</strong>
-            <span class="mini-badge">${escapeHtml(inboxTypeLabel(message.type))}</span>
+            <span>${escapeHtml(inboxTypeLabel(message.type))}</span>
           </div>
-          <p>${escapeHtml(message.body || "")}</p>
+          <p class="inbox-item__body">${escapeHtml(message.body || "")}</p>
         </article>
       `
     )
@@ -118,11 +122,15 @@ function buildInboxHtml(messages) {
 
 function buildStandingsHtml(rows, controlledTeamName) {
   if (!rows.length) {
-    return `<div class="empty-note">順位表データがありません。</div>`;
+    return `
+      <div class="empty-state">
+        順位表データがありません。
+      </div>
+    `;
   }
 
   return `
-    <table class="mini-table">
+    <table class="gm-table">
       <thead>
         <tr>
           <th>球団</th>
@@ -136,9 +144,10 @@ function buildStandingsHtml(rows, controlledTeamName) {
       </thead>
       <tbody>
         ${rows
-          .map(
-            (row) => `
-              <tr class="${row.team === controlledTeamName ? "is-controlled" : ""}">
+          .map((row) => {
+            const isControlled = row.team === controlledTeamName;
+            return `
+              <tr class="${isControlled ? "is-controlled-team" : ""}">
                 <td>${escapeHtml(row.team)}</td>
                 <td>${safeNum(row.W)}</td>
                 <td>${safeNum(row.L)}</td>
@@ -147,8 +156,8 @@ function buildStandingsHtml(rows, controlledTeamName) {
                 <td>${safeNum(row.RS)}</td>
                 <td>${safeNum(row.RA)}</td>
               </tr>
-            `
-          )
+            `;
+          })
           .join("")}
       </tbody>
     </table>
@@ -157,14 +166,17 @@ function buildStandingsHtml(rows, controlledTeamName) {
 
 function buildLastResultsHtml(results, controlledTeamName) {
   if (!results.length) {
-    return `<div class="empty-note">まだ試合結果がありません。</div>`;
+    return `
+      <div class="empty-state">
+        まだ試合結果がありません。
+      </div>
+    `;
   }
 
   return results
     .map((result) => {
       const isControlled =
-        result.away?.name === controlledTeamName ||
-        result.home?.name === controlledTeamName;
+        result.away?.name === controlledTeamName || result.home?.name === controlledTeamName;
 
       const winnerText =
         result.winner === "away"
@@ -174,15 +186,21 @@ function buildLastResultsHtml(results, controlledTeamName) {
           : "Winner: Tie";
 
       return `
-        <article class="result-card ${isControlled ? "is-controlled" : ""}">
-          <div class="result-card-head">
-            <span>${result.status === "final" ? "Final" : "Game"}</span>
+        <article class="result-item ${isControlled ? "is-controlled-game" : ""}">
+          <div class="result-item__status">
+            ${result.status === "final" ? "Final" : "Game"}
           </div>
-          <strong>
-            ${escapeHtml(result.away?.name || "-")} ${safeNum(result.score?.away)} -
-            ${safeNum(result.score?.home)} ${escapeHtml(result.home?.name || "-")}
-          </strong>
-          <p>${safeNum(result.inning, 0)}回${result.half === "top" ? "表" : "裏"}終了 / ${escapeHtml(winnerText)}</p>
+          <div class="result-item__score">
+            ${escapeHtml(result.away?.name || "-")}
+            ${safeNum(result.score?.away)}
+            -
+            ${safeNum(result.score?.home)}
+            ${escapeHtml(result.home?.name || "-")}
+          </div>
+          <div class="result-item__meta">
+            ${safeNum(result.inning, 0)}回${result.half === "top" ? "表" : "裏"}終了 /
+            ${escapeHtml(winnerText)}
+          </div>
         </article>
       `;
     })
@@ -191,11 +209,15 @@ function buildLastResultsHtml(results, controlledTeamName) {
 
 function buildRosterTable(players, kind) {
   if (!players.length) {
-    return `<div class="empty-note">対象選手がいません。</div>`;
+    return `
+      <div class="empty-state">
+        対象選手がいません。
+      </div>
+    `;
   }
 
   return `
-    <table class="mini-table">
+    <table class="gm-table">
       <thead>
         <tr>
           <th>選手</th>
@@ -210,7 +232,9 @@ function buildRosterTable(players, kind) {
             const ratingText =
               kind === "pitcher" || player?.type === "pitcher"
                 ? `CTRL ${safeNum(ratings.control)} / STUFF ${safeNum(ratings.stuff)}`
-                : `CON ${safeNum(ratings.contact)} / POW ${safeNum(ratings.power)} / EYE ${safeNum(ratings.eye)}`;
+                : `CON ${safeNum(ratings.contact)} / POW ${safeNum(ratings.power)} / EYE ${safeNum(
+                    ratings.eye
+                  )}`;
 
             return `
               <tr>
@@ -228,11 +252,15 @@ function buildRosterTable(players, kind) {
 
 function buildFreeAgentHtml(players) {
   if (!players.length) {
-    return `<div class="empty-note">FA候補はいません。</div>`;
+    return `
+      <div class="empty-state">
+        FA候補はいません。
+      </div>
+    `;
   }
 
   return `
-    <table class="mini-table">
+    <table class="gm-table">
       <thead>
         <tr>
           <th>選手</th>
@@ -259,101 +287,77 @@ function buildFreeAgentHtml(players) {
   `;
 }
 
-function transactionLabel(type) {
-  switch (type) {
-    case "sign":
-      return "FA契約";
-    case "trade":
-      return "トレード";
-    case "upgrade_lineup":
-      return "昇格";
-    default:
-      return "取引";
-  }
-}
-
-function transactionClass(type) {
-  switch (type) {
-    case "sign":
-      return "positive";
-    case "trade":
-      return "neutral";
-    case "upgrade_lineup":
-      return "positive";
-    default:
-      return "neutral";
-  }
-}
-
 function buildTransactionsHtml(transactions) {
   if (!transactions.length) {
-    return `<div class="empty-note">まだトランザクションはありません。</div>`;
+    return `
+      <div class="empty-state">
+        まだトランザクションはありません。
+      </div>
+    `;
   }
 
   return transactions
     .map(
       (tx) => `
         <article class="transaction-item">
-          <div class="transaction-item-head">
-            <span class="mini-badge ${badgeClass(transactionClass(tx.type))}">
-              ${escapeHtml(transactionLabel(tx.type))}
-            </span>
-            <span class="mini-badge">${escapeHtml(tx.type || "transaction")}</span>
+          <div class="transaction-item__meta">
+            <strong>${escapeHtml(transactionLabel(tx.type))}</strong>
+            <span>${escapeHtml(tx.type || "transaction")}</span>
           </div>
-          <p>${escapeHtml(tx.text || "")}</p>
+          <p class="transaction-item__body">${escapeHtml(tx.text || "")}</p>
         </article>
       `
     )
     .join("");
 }
 
-export function renderGMPage(dom, gmState) {
-  const pendingCards = getPendingDecisions(gmState);
-  const inbox = getGMInbox(gmState);
-  const standings = getGMStandings(gmState);
-  const lastResults = getLastDayResults(gmState);
-  const transactions = getTransactions(gmState);
-
+export function renderGMPage(dom, viewModel) {
   if (dom.gmStatusPill) {
-    dom.gmStatusPill.textContent = pendingCards.length > 0 ? "判断待ち" : "進行可能";
-    dom.gmStatusPill.className = `status-pill ${pendingCards.length > 0 ? "warning" : "ok"}`;
+    dom.gmStatusPill.textContent = viewModel.statusText;
+    dom.gmStatusPill.className = `status-pill ${viewModel.statusClass}`;
   }
 
-  if (dom.gmTeamName) dom.gmTeamName.textContent = gmState.controlledTeamName || "-";
-  if (dom.gmDayValue) dom.gmDayValue.textContent = String(gmState.day);
-  if (dom.gmBudgetValue) dom.gmBudgetValue.textContent = formatMoney(gmState.budget?.cash || 0);
-  if (dom.gmPayrollValue) dom.gmPayrollValue.textContent = formatMoney(gmState.budget?.payroll || 0);
-  if (dom.gmPendingValue) dom.gmPendingValue.textContent = String(pendingCards.length);
+  if (dom.gmTeamName) dom.gmTeamName.textContent = viewModel.controlledTeamName;
+  if (dom.gmDayValue) dom.gmDayValue.textContent = String(viewModel.day);
+  if (dom.gmBudgetValue) dom.gmBudgetValue.textContent = formatMoney(viewModel.budgetCash);
+  if (dom.gmPayrollValue) dom.gmPayrollValue.textContent = formatMoney(viewModel.budgetPayroll);
+  if (dom.gmPendingValue) dom.gmPendingValue.textContent = String(viewModel.pendingCount);
 
   if (dom.gmPendingCards) {
-    dom.gmPendingCards.innerHTML = buildPendingCardsHtml(pendingCards);
+    dom.gmPendingCards.innerHTML = buildPendingCardsHtml(viewModel.pendingCards);
   }
 
   if (dom.gmInbox) {
-    dom.gmInbox.innerHTML = buildInboxHtml(inbox);
+    dom.gmInbox.innerHTML = buildInboxHtml(viewModel.inbox);
   }
 
   if (dom.gmStandings) {
-    dom.gmStandings.innerHTML = buildStandingsHtml(standings, gmState.controlledTeamName);
+    dom.gmStandings.innerHTML = buildStandingsHtml(
+      viewModel.standings,
+      viewModel.controlledTeamName
+    );
   }
 
   if (dom.gmLastResults) {
-    dom.gmLastResults.innerHTML = buildLastResultsHtml(lastResults, gmState.controlledTeamName);
+    dom.gmLastResults.innerHTML = buildLastResultsHtml(
+      viewModel.lastResults,
+      viewModel.controlledTeamName
+    );
   }
 
   if (dom.gmRosterLineup) {
-    dom.gmRosterLineup.innerHTML = buildRosterTable(gmState.roster?.lineup || [], "batter");
+    dom.gmRosterLineup.innerHTML = buildRosterTable(viewModel.rosterLineup, "batter");
   }
 
   if (dom.gmRosterBench) {
-    dom.gmRosterBench.innerHTML = buildRosterTable(gmState.roster?.bench || [], "batter");
+    dom.gmRosterBench.innerHTML = buildRosterTable(viewModel.rosterBench, "batter");
   }
 
   if (dom.gmFreeAgents) {
-    dom.gmFreeAgents.innerHTML = buildFreeAgentHtml(gmState.freeAgents || []);
+    dom.gmFreeAgents.innerHTML = buildFreeAgentHtml(viewModel.freeAgents);
   }
 
   if (dom.gmTransactions) {
-    dom.gmTransactions.innerHTML = buildTransactionsHtml(transactions);
+    dom.gmTransactions.innerHTML = buildTransactionsHtml(viewModel.transactions);
   }
 }
