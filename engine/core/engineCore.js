@@ -25,6 +25,18 @@ import {
   clearBases,
 } from "../../services/gameStateHelperService.js";
 import { buildPitchExecutionContext } from "../../services/pitchExecutionService.js";
+import {
+  beginPlateAppearanceIfNeeded,
+  finishPlateAppearanceState,
+} from "../../services/plateAppearanceStateService.js";
+import { addQoCToBox } from "../../services/boxScoreService.js";
+import {
+  addPlateAppearanceStat,
+  addStrikeoutStat,
+  addWalkStat,
+  addHitStat,
+  addOutInPlayStat,
+} from "../../services/statsUpdateService.js";
 
 /**
  * engineCore.js の責務
@@ -36,6 +48,8 @@ import { buildPitchExecutionContext } from "../../services/pitchExecutionService
  * 打球結果分岐は services に退避。
  * 投手交代判定は services に退避。
  * state helper / pitch helper も services に退避。
+ * plate appearance state / box score helper も services に退避。
+ * 打者成績更新も services に退避。
  * 確率テーブルや計算式は config / services に退避済み。
  */
 
@@ -53,39 +67,6 @@ function emitLastPitchPatch(options, patch) {
   options.onLastPitchPatch(patch);
 }
 
-function addPlateAppearanceStat(batter) {
-  batter.gameStats.PA += 1;
-}
-
-function addStrikeoutStat(batter) {
-  batter.gameStats.K += 1;
-}
-
-function addWalkStat(batter, rbi = 0) {
-  batter.gameStats.BB += 1;
-  batter.gameStats.RBI += rbi;
-}
-
-function addHitStat(batter, hitType, rbi = 0) {
-  batter.gameStats.AB += 1;
-  batter.gameStats.H += 1;
-  batter.gameStats.RBI += rbi;
-
-  if (hitType === "2B") batter.gameStats.doubles += 1;
-  if (hitType === "3B") batter.gameStats.triples += 1;
-  if (hitType === "HR") batter.gameStats.HR += 1;
-}
-
-function addOutInPlayStat(batter) {
-  batter.gameStats.AB += 1;
-}
-
-function addQoCToBox(state, qoc) {
-  const side = currentSide(state);
-  if (!state.box?.[side]?.qoc) return;
-  state.box[side].qoc[qoc] = (state.box[side].qoc[qoc] || 0) + 1;
-}
-
 function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
   const side = currentSide(state);
 
@@ -97,34 +78,23 @@ function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
     qoc,
     options,
     random,
-    addQoCToBox,
+    addQoCToBox: (runtimeState, runtimeQoc) =>
+      addQoCToBox(runtimeState, runtimeQoc, { currentSide }),
     addOutInPlayStat,
     addHitStat,
     advanceRunnersOnHit,
     maybeEndGameMidInning,
     moveToNextBatter,
-    finishPlateAppearanceState,
+    finishPlateAppearanceState: (runtimeState, runtimeOptions) =>
+      finishPlateAppearanceState(runtimeState, {
+        defenseSide,
+        resetCount,
+        maybeAutoChangePitcher,
+        emitLog,
+        options: runtimeOptions,
+      }),
     emitLog,
     emitLastPitchPatch,
-  });
-}
-
-function beginPlateAppearanceIfNeeded(state) {
-  if (state.plateAppearanceActive) return;
-  const batter = pickBatter(state);
-  addPlateAppearanceStat(batter);
-  state.plateAppearanceActive = true;
-}
-
-function finishPlateAppearanceState(state, options) {
-  const side = defenseSide(state);
-  if (state.pitcherUsage?.[side]) state.pitcherUsage[side].battersFaced += 1;
-  state.plateAppearanceActive = false;
-  resetCount(state);
-  maybeAutoChangePitcher(state, {
-    defenseSide,
-    emitLog: (text) => emitLog(options, text),
-    betweenInnings: false,
   });
 }
 
@@ -136,7 +106,10 @@ export function stepPitchMutable(state, rawOptions = {}) {
   const options = { ...rawOptions };
   if (state.isComplete) return state;
 
-  beginPlateAppearanceIfNeeded(state);
+  beginPlateAppearanceIfNeeded(state, {
+    pickBatter,
+    addPlateAppearanceStat,
+  });
 
   const batter = pickBatter(state);
   const pitcher = defensePitcher(state);
@@ -195,7 +168,14 @@ export function stepPitchMutable(state, rawOptions = {}) {
     applyWalkAdvance,
     maybeEndGameMidInning,
     moveToNextBatter,
-    finishPlateAppearanceState,
+    finishPlateAppearanceState: (runtimeState, runtimeOptions) =>
+      finishPlateAppearanceState(runtimeState, {
+        defenseSide,
+        resetCount,
+        maybeAutoChangePitcher,
+        emitLog,
+        options: runtimeOptions,
+      }),
     resolveQoCResult,
   });
 
