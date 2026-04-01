@@ -6,6 +6,15 @@ import {
   chooseCourse,
   calcPitchOutcomeProbabilities,
 } from "../../services/pitchOutcomeService.js";
+import {
+  applyWalkAdvance,
+  advanceRunnersOnHit,
+} from "../../services/baseRunningService.js";
+
+import {
+  maybeEndGameMidInning,
+  maybeChangeSides,
+} from "../../services/inningStateService.js";
 
 /**
  * engineCore.js の責務
@@ -88,97 +97,6 @@ function emitLastPitchPatch(options, patch) {
   options.onLastPitchPatch(patch);
 }
 
-function createRunnerRef(state, batter) {
-  return {
-    side: currentSide(state),
-    name: batter?.name || "Runner",
-    batterName: batter?.name || "Runner",
-  };
-}
-
-function creditRunToRunner(state, runner) {
-  if (!runner?.side || !runner?.name) return;
-  const team = runner.side === "away" ? state.awayTeam : state.homeTeam;
-  const player = team.lineup.find((p) => p.name === runner.name);
-  if (player) {
-    const stats = player.gameStats;
-    if (stats) stats.R += 1;
-  }
-}
-
-function addRuns(state, runs) {
-  if (runs <= 0) return;
-  const side = currentSide(state);
-  state.score[side] += runs;
-  state.box[side].runs += runs;
-}
-
-function scoreRunnerGroup(state, runners) {
-  if (!runners.length) return 0;
-  runners.forEach((runner) => creditRunToRunner(state, runner));
-  addRuns(state, runners.length);
-  return runners.length;
-}
-
-function applyWalkAdvance(state, batter) {
-  const current = { ...state.bases };
-  const next = {
-    first: createRunnerRef(state, batter),
-    second: null,
-    third: current.third,
-  };
-  const scoring = [];
-
-  if (current.first) {
-    next.second = current.first;
-    if (current.second) {
-      next.third = current.second;
-      if (current.third) scoring.push(current.third);
-    }
-  } else {
-    next.second = current.second;
-  }
-
-  state.bases = next;
-  return scoreRunnerGroup(state, scoring);
-}
-
-function advanceRunnersOnHit(state, batter, basesTaken) {
-  const current = [state.bases.first, state.bases.second, state.bases.third];
-  const next = { first: null, second: null, third: null };
-  const scoring = [];
-  const batterRunner = createRunnerRef(state, batter);
-
-  for (let i = 2; i >= 0; i -= 1) {
-    const runner = current[i];
-    if (!runner) continue;
-
-    const dest = i + basesTaken;
-    if (dest >= 3) {
-      scoring.push(runner);
-    } else if (dest === 0) {
-      next.first = runner;
-    } else if (dest === 1) {
-      next.second = runner;
-    } else {
-      next.third = runner;
-    }
-  }
-
-  if (basesTaken >= 4) {
-    scoring.push(batterRunner);
-  } else if (basesTaken === 1) {
-    next.first = batterRunner;
-  } else if (basesTaken === 2) {
-    next.second = batterRunner;
-  } else if (basesTaken === 3) {
-    next.third = batterRunner;
-  }
-
-  state.bases = next;
-  return scoreRunnerGroup(state, scoring);
-}
-
 function addPlateAppearanceStat(batter) {
   batter.gameStats.PA += 1;
 }
@@ -231,24 +149,6 @@ function addQoCToBox(state, qoc) {
   state.box[side].qoc[qoc] = (state.box[side].qoc[qoc] || 0) + 1;
 }
 
-function maybeEndGameMidInning(state, options) {
-  if (
-    state.inning >= 9 &&
-    state.half === "bottom" &&
-    state.score.home > state.score.away
-  ) {
-    state.isComplete = true;
-    state.finalInning = state.inning;
-    state.finalHalf = "bottom";
-    emitLog(
-      options,
-      `サヨナラ！試合終了: ${state.awayTeam.name} ${state.score.away} - ${state.score.home} ${state.homeTeam.name}`
-    );
-    return true;
-  }
-  return false;
-}
-
 function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
   const side = currentSide(state);
   const probs = getHitTypeProbabilities(qoc);
@@ -280,7 +180,9 @@ function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, options);
+    maybeEndGameMidInning(state, {
+      emitLog: (text) => emitLog(options, text),
+    });
   } else if (roll < doubleCut) {
     state.box[side].hits += 1;
     state.box[side].doubles += 1;
@@ -293,7 +195,9 @@ function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, options);
+    maybeEndGameMidInning(state, {
+      emitLog: (text) => emitLog(options, text),
+    });
   } else if (roll < tripleCut) {
     state.box[side].hits += 1;
     state.box[side].triples += 1;
@@ -306,7 +210,9 @@ function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, options);
+    maybeEndGameMidInning(state, {
+      emitLog: (text) => emitLog(options, text),
+    });
   } else {
     state.box[side].hits += 1;
     state.box[side].hr += 1;
@@ -316,52 +222,9 @@ function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
     emitLog(options, `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で本塁打。${runs}点`);
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, options);
-  }
-}
-
-function maybeChangeSides(state, options) {
-  if (state.outs < 3 || state.isComplete) return;
-
-  if (state.half === "top") {
-    if (state.inning >= 9 && state.score.home > state.score.away) {
-      state.isComplete = true;
-      state.finalInning = state.inning;
-      state.finalHalf = "top";
-      emitLog(
-        options,
-        `試合終了: ${state.awayTeam.name} ${state.score.away} - ${state.score.home} ${state.homeTeam.name}`
-      );
-      return;
-    }
-
-    maybeAutoChangePitcher(state, options, true);
-    state.half = "bottom";
-    state.outs = 0;
-    resetCount(state);
-    clearBases(state);
-    state.plateAppearanceActive = false;
-    emitLog(options, `${state.inning}回裏へ`);
-  } else {
-    if (state.inning >= 9 && state.score.home !== state.score.away) {
-      state.isComplete = true;
-      state.finalInning = state.inning;
-      state.finalHalf = "bottom";
-      emitLog(
-        options,
-        `試合終了: ${state.awayTeam.name} ${state.score.away} - ${state.score.home} ${state.homeTeam.name}`
-      );
-      return;
-    }
-
-    maybeAutoChangePitcher(state, options, true);
-    state.inning += 1;
-    state.half = "top";
-    state.outs = 0;
-    resetCount(state);
-    clearBases(state);
-    state.plateAppearanceActive = false;
-    emitLog(options, `${state.inning}回表へ`);
+    maybeEndGameMidInning(state, {
+      emitLog: (text) => emitLog(options, text),
+    });
   }
 }
 
@@ -505,7 +368,9 @@ export function stepPitchMutable(state, rawOptions = {}) {
         emitLog(options, `${batter.name}: 四球${runs > 0 ? `。${runs}点` : ""}`);
         moveToNextBatter(state);
         finishPlateAppearanceState(state, options);
-        maybeEndGameMidInning(state, options);
+        maybeEndGameMidInning(state, {
+          emitLog: (text) => emitLog(options, text),
+        });
       }
     }
   } else {
@@ -542,9 +407,17 @@ export function stepPitchMutable(state, rawOptions = {}) {
   }
 
   const deltaOuts = Math.max(0, state.outs - outsBefore);
+
   if (pitcherUsage) pitcherUsage.outsRecorded += deltaOuts;
 
-  maybeChangeSides(state, options);
+  maybeChangeSides(state, {
+    emitLog: (text) => emitLog(options, text),
+    resetCount: () => resetCount(state),
+    clearBases: () => clearBases(state),
+    maybeAutoChangePitcher: (betweenInnings) =>
+      maybeAutoChangePitcher(state, options, betweenInnings),
+  });
+
   return state;
 }
 
