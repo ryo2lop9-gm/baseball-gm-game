@@ -1,6 +1,5 @@
-import { getPitchTypeAdjustments, getPitchTypeLabel } from "../../config/pitchConfig.js";
+import { getPitchTypeLabel } from "../../config/pitchConfig.js";
 import { getHitTypeProbabilities } from "../../config/hitOutcomeConfig.js";
-import { chooseQoC } from "../../services/qocService.js";
 import { chooseZoneSpot } from "../../services/zoneService.js";
 import {
   chooseCourse,
@@ -16,12 +15,15 @@ import {
   maybeChangeSides,
 } from "../../services/inningStateService.js";
 
+import { resolvePlateAppearanceResult } from "../../services/plateAppearanceService.js";
+
 /**
  * engineCore.js の責務
  * - 1球進行 / 試合進行
  * - state mutation
- * - 走者進塁・得点・イニング遷移
  *
+ * 走者進塁・得点・イニング遷移は services に退避。
+ * 打席結果分岐も services に退避。
  * 確率テーブルや計算式は config / services に退避済み。
  */
 
@@ -341,70 +343,27 @@ export function stepPitchMutable(state, rawOptions = {}) {
     zoneCol,
   });
 
-  if (!swung) {
-    if (isStrike) {
-      state.strikes += 1;
-      emitLog(options, `${batter.name}: 見逃しストライク (${state.balls}-${state.strikes})`);
-
-      if (state.strikes >= 3) {
-        state.box[side].strikeouts += 1;
-        addStrikeoutStat(batter);
-        batter.gameStats.AB += 1;
-        state.outs += 1;
-        emitLastPitchPatch(options, { resultText: "見逃し三振" });
-        emitLog(options, `${batter.name}: 三振`);
-        moveToNextBatter(state);
-        finishPlateAppearanceState(state, options);
-      }
-    } else {
-      state.balls += 1;
-      emitLog(options, `${batter.name}: ボール (${state.balls}-${state.strikes})`);
-
-      if (state.balls >= 4) {
-        state.box[side].walks += 1;
-        const runs = applyWalkAdvance(state, batter);
-        addWalkStat(batter, runs);
-        emitLastPitchPatch(options, { resultText: "四球" });
-        emitLog(options, `${batter.name}: 四球${runs > 0 ? `。${runs}点` : ""}`);
-        moveToNextBatter(state);
-        finishPlateAppearanceState(state, options);
-        maybeEndGameMidInning(state, {
-          emitLog: (text) => emitLog(options, text),
-        });
-      }
-    }
-  } else {
-    const contactRate = isStrike ? probs.zContactRate : probs.oContactRate;
-    const madeContact = random() < contactRate;
-    emitLastPitchPatch(options, { madeContact });
-
-    if (!madeContact) {
-      state.strikes += 1;
-      emitLog(options, `${batter.name}: 空振り (${state.balls}-${state.strikes})`);
-
-      if (state.strikes >= 3) {
-        state.box[side].strikeouts += 1;
-        addStrikeoutStat(batter);
-        batter.gameStats.AB += 1;
-        state.outs += 1;
-        emitLastPitchPatch(options, { resultText: "空振り三振" });
-        emitLog(options, `${batter.name}: 三振`);
-        moveToNextBatter(state);
-        finishPlateAppearanceState(state, options);
-      }
-    } else {
-      const isFoul = random() < (isStrike ? 0.26 : 0.18);
-
-      if (isFoul) {
-        if (state.strikes < 2) state.strikes += 1;
-        emitLastPitchPatch(options, { resultText: "ファウル" });
-        emitLog(options, `${batter.name}: ファウル (${state.balls}-${state.strikes})`);
-      } else {
-        const qoc = chooseQoC(batter, course, pitchType);
-        resolveQoCResult(state, batter, course, pitchType, qoc, options);
-      }
-    }
-  }
+  resolvePlateAppearanceResult({
+    state,
+    batter,
+    side,
+    pitchType,
+    course,
+    probs,
+    isStrike,
+    swung,
+    options,
+    random,
+    emitLog,
+    emitLastPitchPatch,
+    addStrikeoutStat,
+    addWalkStat,
+    applyWalkAdvance,
+    maybeEndGameMidInning,
+    moveToNextBatter,
+    finishPlateAppearanceState,
+    resolveQoCResult,
+  });
 
   const deltaOuts = Math.max(0, state.outs - outsBefore);
 
