@@ -1,17 +1,5 @@
 import { getTuningDom } from "./tuningDom.js";
 import {
-  simulateGame,
-  simulateNextPitch,
-  simulateNextPlateAppearance,
-} from "../engine/game/gameEngine.js";
-import { simulateSeason } from "../engine/game/seasonEngine.js";
-import {
-  fillEditorSlotOptions,
-  getSelectedEditableEntity,
-  loadEditorFormFromEntity,
-  applyEditorFormToRoster,
-} from "../engine/gm/editorEngine.js";
-import {
   renderGameCore,
   renderPitchPresentation,
   renderLineups,
@@ -20,6 +8,7 @@ import {
   renderTuningGameTables,
   renderTuningSeasonTables,
 } from "../render/tuningRender.js";
+import { createTuningFacade } from "../services/tuning/tuningFacade.js";
 
 export function createTuningPageController({
   getAppState,
@@ -31,14 +20,24 @@ export function createTuningPageController({
   createFreshTuningGame,
 }) {
   const dom = getTuningDom();
+  const facade = createTuningFacade({
+    getAppState,
+    setAppTuningState,
+    setAppTuningSeasonSummary,
+    getTuningRosterBundle,
+    setTuningRosterBundle,
+    createDefaultRosterBundle,
+    createFreshTuningGame,
+  });
+
   let lastRenderedLogIndex = 0;
 
   function getTuningState() {
-    return getAppState().tuning;
+    return facade.getTuningState();
   }
 
   function getTuningSeasonSummary() {
-    return getAppState().tuningSeasonSummary;
+    return facade.getTuningSeasonSummary();
   }
 
   function resetLogCursor() {
@@ -55,6 +54,7 @@ export function createTuningPageController({
 
   function renderFullLog() {
     clearLog(dom);
+
     const lines = Array.isArray(getTuningState().presentation?.log)
       ? getTuningState().presentation.log
       : [];
@@ -74,6 +74,7 @@ export function createTuningPageController({
     if (!dom.log || !Array.isArray(getTuningState().presentation?.log)) return;
 
     const lines = getTuningState().presentation.log;
+
     for (let i = lastRenderedLogIndex; i < lines.length; i += 1) {
       appendLog(dom, lines[i]);
     }
@@ -83,9 +84,7 @@ export function createTuningPageController({
   }
 
   function refreshEditorForm() {
-    fillEditorSlotOptions(dom);
-    const entity = getSelectedEditableEntity(dom, getTuningRosterBundle());
-    loadEditorFormFromEntity(dom, entity);
+    facade.refreshEditorForm(dom);
   }
 
   function syncTuningPage() {
@@ -94,123 +93,53 @@ export function createTuningPageController({
   }
 
   function prepareFreshTuningGame() {
-    const newGame = createFreshTuningGame(getTuningRosterBundle());
-    setAppTuningState(newGame);
+    facade.prepareFreshTuningGame();
     resetLogCursor();
     renderFullLog();
     syncTuningPage();
   }
 
-  function pushFinishedGameNote() {
-    const state = getTuningState();
-    if (!Array.isArray(state.presentation?.log)) return;
-
-    const next = structuredClone(state);
-    next.presentation = next.presentation || {};
-    next.presentation.log = Array.isArray(next.presentation.log)
-      ? [...next.presentation.log]
-      : [];
-    next.presentation.log.push("この試合はすでに終了しています。新しい試合を準備してください。");
-
-    setAppTuningState(next);
-    appendOnlyNewLogs();
-    syncTuningPage();
-  }
-
   function stepOnePitch() {
-    if (getTuningState().isComplete) {
-      pushFinishedGameNote();
-      return;
-    }
-
-    const next = simulateNextPitch(getTuningState());
-    setAppTuningState(next);
+    facade.stepOnePitch();
     appendOnlyNewLogs();
     syncTuningPage();
   }
 
   function stepOnePlateAppearance() {
-    if (getTuningState().isComplete) {
-      pushFinishedGameNote();
-      return;
-    }
-
-    const next = simulateNextPlateAppearance(getTuningState());
-    setAppTuningState(next);
+    facade.stepOnePlateAppearance();
     appendOnlyNewLogs();
     syncTuningPage();
   }
 
   function stepHalfInning() {
-    if (getTuningState().isComplete) {
-      pushFinishedGameNote();
-      return;
-    }
-
-    const startInning = getTuningState().inning;
-    const startHalf = getTuningState().half;
-    let next = getTuningState();
-
-    while (!next.isComplete) {
-      next = simulateNextPitch(next);
-      if (next.isComplete) break;
-      if (next.inning !== startInning || next.half !== startHalf) break;
-    }
-
-    setAppTuningState(next);
+    facade.stepHalfInning();
     appendOnlyNewLogs();
     syncTuningPage();
   }
 
   function playFullGame() {
-    if (getTuningState().isComplete) {
-      pushFinishedGameNote();
-      return;
-    }
-
-    const next = simulateGame(getTuningState());
-    setAppTuningState(next);
+    facade.playFullGame();
     appendOnlyNewLogs();
     syncTuningPage();
   }
 
-  function buildCurrentTuningTeamsFromRoster() {
-    const bundle = getTuningRosterBundle();
-
-    return {
-      away: {
-        name: bundle.awayMeta.name,
-        lineup: structuredClone(bundle.awayRoster.lineup || []),
-        startingPitcher: structuredClone(bundle.awayRoster.rotation?.[0] || null),
-        bullpen: structuredClone(bundle.awayRoster.bullpen || []),
-      },
-      home: {
-        name: bundle.homeMeta.name,
-        lineup: structuredClone(bundle.homeRoster.lineup || []),
-        startingPitcher: structuredClone(bundle.homeRoster.rotation?.[0] || null),
-        bullpen: structuredClone(bundle.homeRoster.bullpen || []),
-      },
-    };
-  }
-
   function runSeasonSimulation(games) {
-    const teams = buildCurrentTuningTeamsFromRoster();
-    const summary = simulateSeason(teams.away, teams.home, games);
-    setAppTuningSeasonSummary(summary);
+    facade.runSeasonSimulation(games);
     syncTuningPage();
   }
 
   function resetSandboxRoster() {
-    setTuningRosterBundle(createDefaultRosterBundle());
-    setAppTuningSeasonSummary(null);
-    prepareFreshTuningGame();
+    facade.resetSandboxRoster();
+    resetLogCursor();
+    renderFullLog();
+    syncTuningPage();
   }
 
   function applyEditorChanges() {
-    const nextBundle = applyEditorFormToRoster(dom, getTuningRosterBundle());
-    setTuningRosterBundle(nextBundle);
-    setAppTuningSeasonSummary(null);
-    prepareFreshTuningGame();
+    facade.applyEditorChanges(dom);
+    resetLogCursor();
+    renderFullLog();
+    syncTuningPage();
   }
 
   function wireEvents() {
@@ -218,13 +147,17 @@ export function createTuningPageController({
       setAppTuningSeasonSummary(null);
       prepareFreshTuningGame();
     });
+
     dom.stepPitchBtn?.addEventListener("click", stepOnePitch);
     dom.stepPaBtn?.addEventListener("click", stepOnePlateAppearance);
     dom.halfInningBtn?.addEventListener("click", stepHalfInning);
     dom.playGameBtn?.addEventListener("click", playFullGame);
+
     dom.sim10Btn?.addEventListener("click", () => runSeasonSimulation(10));
     dom.sim162Btn?.addEventListener("click", () => runSeasonSimulation(162));
+
     dom.resetTuningRosterBtn?.addEventListener("click", resetSandboxRoster);
+
     dom.editorSideSelect?.addEventListener("change", refreshEditorForm);
     dom.editorPlayerTypeSelect?.addEventListener("change", refreshEditorForm);
     dom.editorSlotSelect?.addEventListener("change", refreshEditorForm);
