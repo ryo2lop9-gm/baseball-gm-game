@@ -1,5 +1,3 @@
-import { getPitchTypeLabel } from "../../config/pitchConfig.js";
-import { getHitTypeProbabilities } from "../../config/hitOutcomeConfig.js";
 import { chooseZoneSpot } from "../../services/zoneService.js";
 import {
   chooseCourse,
@@ -16,6 +14,7 @@ import {
 } from "../../services/inningStateService.js";
 
 import { resolvePlateAppearanceResult } from "../../services/plateAppearanceService.js";
+import { resolveContactResult } from "../../services/contactResolutionService.js";
 
 /**
  * engineCore.js の責務
@@ -23,7 +22,8 @@ import { resolvePlateAppearanceResult } from "../../services/plateAppearanceServ
  * - state mutation
  *
  * 走者進塁・得点・イニング遷移は services に退避。
- * 打席結果分岐も services に退避。
+ * 打席結果分岐は services に退避。
+ * 打球結果分岐は services に退避。
  * 確率テーブルや計算式は config / services に退避済み。
  */
 
@@ -153,81 +153,25 @@ function addQoCToBox(state, qoc) {
 
 function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
   const side = currentSide(state);
-  const probs = getHitTypeProbabilities(qoc);
-  const roll = random();
 
-  addQoCToBox(state, qoc);
-
-  const outCut = probs.out;
-  const singleCut = outCut + probs.single;
-  const doubleCut = singleCut + probs.double;
-  const tripleCut = doubleCut + probs.triple;
-
-  if (roll < outCut) {
-    state.outs += 1;
-    state.box[side].outsInPlay += 1;
-    addOutInPlayStat(batter);
-    emitLastPitchPatch(options, { resultText: `${qoc} / 凡打` });
-    emitLog(options, `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で凡打。`);
-    moveToNextBatter(state);
-    finishPlateAppearanceState(state, options);
-  } else if (roll < singleCut) {
-    state.box[side].hits += 1;
-    const runs = advanceRunnersOnHit(state, batter, 1);
-    addHitStat(batter, "1B", runs);
-    emitLastPitchPatch(options, { resultText: `${qoc} / 安打` });
-    emitLog(
-      options,
-      `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で安打。${runs > 0 ? `${runs}点` : ""}`
-    );
-    moveToNextBatter(state);
-    finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, {
-      emitLog: (text) => emitLog(options, text),
-    });
-  } else if (roll < doubleCut) {
-    state.box[side].hits += 1;
-    state.box[side].doubles += 1;
-    const runs = advanceRunnersOnHit(state, batter, 2);
-    addHitStat(batter, "2B", runs);
-    emitLastPitchPatch(options, { resultText: `${qoc} / 二塁打` });
-    emitLog(
-      options,
-      `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で二塁打。${runs > 0 ? `${runs}点` : ""}`
-    );
-    moveToNextBatter(state);
-    finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, {
-      emitLog: (text) => emitLog(options, text),
-    });
-  } else if (roll < tripleCut) {
-    state.box[side].hits += 1;
-    state.box[side].triples += 1;
-    const runs = advanceRunnersOnHit(state, batter, 3);
-    addHitStat(batter, "3B", runs);
-    emitLastPitchPatch(options, { resultText: `${qoc} / 三塁打` });
-    emitLog(
-      options,
-      `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で三塁打。${runs > 0 ? `${runs}点` : ""}`
-    );
-    moveToNextBatter(state);
-    finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, {
-      emitLog: (text) => emitLog(options, text),
-    });
-  } else {
-    state.box[side].hits += 1;
-    state.box[side].hr += 1;
-    const runs = advanceRunnersOnHit(state, batter, 4);
-    addHitStat(batter, "HR", runs);
-    emitLastPitchPatch(options, { resultText: `${qoc} / 本塁打` });
-    emitLog(options, `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で本塁打。${runs}点`);
-    moveToNextBatter(state);
-    finishPlateAppearanceState(state, options);
-    maybeEndGameMidInning(state, {
-      emitLog: (text) => emitLog(options, text),
-    });
-  }
+  resolveContactResult({
+    state,
+    batter,
+    side,
+    pitchType,
+    qoc,
+    options,
+    random,
+    addQoCToBox,
+    addOutInPlayStat,
+    addHitStat,
+    advanceRunnersOnHit,
+    maybeEndGameMidInning,
+    moveToNextBatter,
+    finishPlateAppearanceState,
+    emitLog,
+    emitLastPitchPatch,
+  });
 }
 
 function beginPlateAppearanceIfNeeded(state) {
