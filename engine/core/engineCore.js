@@ -38,21 +38,6 @@ import {
   addOutInPlayStat,
 } from "../../services/statsUpdateService.js";
 
-/**
- * engineCore.js の責務
- * - 1球進行 / 試合進行
- * - state mutation
- *
- * 走者進塁・得点・イニング遷移は services に退避。
- * 打席結果分岐は services に退避。
- * 打球結果分岐は services に退避。
- * 投手交代判定は services に退避。
- * state helper / pitch helper も services に退避。
- * plate appearance state / box score helper も services に退避。
- * 打者成績更新も services に退避。
- * 確率テーブルや計算式は config / services に退避済み。
- */
-
 function random() {
   return Math.random();
 }

@@ -1,5 +1,9 @@
 import { chooseQoC } from "./qocService.js";
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function buildTakeStrikeLogText(batter, state, strikeTypeLabel) {
   const suffix = strikeTypeLabel ? `・${strikeTypeLabel}` : "";
   return `${batter.name}: 見逃しストライク${suffix} (${state.balls}-${state.strikes})`;
@@ -8,6 +12,32 @@ function buildTakeStrikeLogText(batter, state, strikeTypeLabel) {
 function buildBallLogText(batter, state, ballTypeLabel) {
   const suffix = ballTypeLabel ? `・${ballTypeLabel}` : "";
   return `${batter.name}: ボール${suffix} (${state.balls}-${state.strikes})`;
+}
+
+function calcTakeStrikeChance({
+  batter,
+  isStrike,
+  strikeJudgeDifficulty,
+  borderLikelihood,
+}) {
+  if (!isStrike) {
+    return 1;
+  }
+
+  const eye = Number(batter?.ratings?.eye || batter?.eye || 50);
+  const eyeScore = clamp((eye - 50) / 50, -1, 1);
+
+  let chance = 1.0;
+
+  // きわどい球ほど見逃しストライクになりにくくする
+  chance -= strikeJudgeDifficulty * 0.18;
+  chance -= borderLikelihood * 0.08;
+
+  // 選球眼が高いほど際どい球を見逃しストライクにされにくい
+  chance -= eyeScore * strikeJudgeDifficulty * 0.10;
+  chance -= eyeScore * borderLikelihood * 0.05;
+
+  return clamp(chance, 0.82, 1.0);
 }
 
 export function resolvePlateAppearanceResult({
@@ -62,27 +92,69 @@ export function resolvePlateAppearanceResult({
 
   if (!swung) {
     if (isStrike) {
-      state.strikes += 1;
+      const calledStrikeChance = calcTakeStrikeChance({
+        batter,
+        isStrike,
+        strikeJudgeDifficulty,
+        borderLikelihood,
+      });
+
+      const calledStrike = random() < calledStrikeChance;
+
+      if (calledStrike) {
+        state.strikes += 1;
+
+        emitLog(
+          options,
+          buildTakeStrikeLogText(batter, state, strikeTypeLabel)
+        );
+
+        if (state.strikes >= 3) {
+          state.box[side].strikeouts += 1;
+          addStrikeoutStat(batter);
+          batter.gameStats.AB += 1;
+          state.outs += 1;
+
+          emitLastPitchPatch(options, {
+            resultText: "見逃し三振",
+          });
+
+          emitLog(options, `${batter.name}: 三振`);
+
+          moveToNextBatter(state);
+          finishPlateAppearanceState(state, options);
+        }
+        return;
+      }
+
+      state.balls += 1;
+
+      emitLastPitchPatch(options, {
+        resultText: "ボール判定",
+      });
 
       emitLog(
         options,
-        buildTakeStrikeLogText(batter, state, strikeTypeLabel)
+        `${batter.name}: ボール判定に外れる・${strikeTypeLabel || "際どい球"} (${state.balls}-${state.strikes})`
       );
 
-      if (state.strikes >= 3) {
-        state.box[side].strikeouts += 1;
-        addStrikeoutStat(batter);
-        batter.gameStats.AB += 1;
-        state.outs += 1;
+      if (state.balls >= 4) {
+        state.box[side].walks += 1;
+        const runs = applyWalkAdvance(state, batter);
+        addWalkStat(batter, runs);
 
         emitLastPitchPatch(options, {
-          resultText: "見逃し三振",
+          resultText: "四球",
         });
 
-        emitLog(options, `${batter.name}: 三振`);
+        emitLog(options, `${batter.name}: 四球${runs > 0 ? `。${runs}点` : ""}`);
 
         moveToNextBatter(state);
         finishPlateAppearanceState(state, options);
+
+        maybeEndGameMidInning(state, {
+          emitLog: (text) => emitLog(options, text),
+        });
       }
       return;
     }
