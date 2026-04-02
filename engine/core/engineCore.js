@@ -106,6 +106,7 @@ export function stepPitchMutable(state, rawOptions = {}) {
 
   const {
     pitchType,
+    baseCourse,
     course,
     probs,
     isStrike,
@@ -127,6 +128,9 @@ export function stepPitchMutable(state, rawOptions = {}) {
     targetEdgeHighRate,
     rawOSwingRate,
     adjustedOSwingRate,
+    mistakeRate,
+    isMistake,
+    drift,
   } = buildPitchExecutionContext({
     batter,
     pitcher,
@@ -141,6 +145,7 @@ export function stepPitchMutable(state, rawOptions = {}) {
 
   emitLastPitchPatch(options, {
     pitchType,
+    baseCourse,
     course,
     isStrike,
     swung,
@@ -167,6 +172,10 @@ export function stepPitchMutable(state, rawOptions = {}) {
     rawOSwingRate: rawOSwingRate ?? probs?.rawOSwingRate ?? null,
     adjustedOSwingRate:
       adjustedOSwingRate ?? probs?.adjustedOSwingRate ?? null,
+
+    mistakeRate: mistakeRate ?? null,
+    isMistake: isMistake ?? false,
+    drift: drift ?? 0,
   });
 
   resolvePlateAppearanceResult({

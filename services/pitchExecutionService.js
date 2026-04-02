@@ -1,6 +1,9 @@
 import {
   classifyStrikeType,
   classifyBallType,
+  controlToMistakeRate,
+  determineDrift,
+  applyDriftToCourse,
 } from "./pitchQualityService.js";
 
 function clamp(value, min, max) {
@@ -82,6 +85,13 @@ function calcBallTypeOSwingAdjustment(ballInfo, batter) {
   return adjustment;
 }
 
+function resolveCountState(balls, strikes) {
+  if (strikes >= 2) return "twoStrike";
+  if (balls > strikes) return "batterAhead";
+  if (strikes > balls) return "pitcherAhead";
+  return "neutral";
+}
+
 export function buildPitchExecutionContext({
   batter,
   pitcher,
@@ -94,7 +104,19 @@ export function buildPitchExecutionContext({
   shouldPatchLastPitch,
 }) {
   const pitchType = choosePitchType(pitcher, random);
-  const course = chooseCourse(pitcher, random);
+  const baseCourse = chooseCourse(pitcher, random);
+
+  const controlValue = Number(pitcher?.ratings?.control || 50);
+  const mistakeRate = controlToMistakeRate(controlValue, pitchType);
+  const isMistake = random() < mistakeRate;
+  const drift = determineDrift({
+    pitchName: pitchType,
+    controlValue,
+    isMistake,
+    random,
+  });
+
+  const course = applyDriftToCourse(baseCourse, drift, isMistake, random);
 
   const probs = calcPitchOutcomeProbabilities(
     batter,
@@ -113,9 +135,9 @@ export function buildPitchExecutionContext({
         resolvedZoneRow,
         resolvedZoneCol,
         pitchType,
-        pitcher?.ratings?.control || 50,
-        0,
-        false,
+        controlValue,
+        drift,
+        isMistake,
         random
       )
     : getEmptyStrikeInfo();
@@ -124,11 +146,11 @@ export function buildPitchExecutionContext({
     ? classifyBallType(
         resolvedZoneRow,
         resolvedZoneCol,
+        { countState: resolveCountState(balls, strikes) },
         pitchType,
-        balls,
-        strikes,
-        0,
-        false,
+        controlValue,
+        drift,
+        isMistake,
         random
       )
     : getEmptyBallInfo();
@@ -147,6 +169,7 @@ export function buildPitchExecutionContext({
 
   return {
     pitchType,
+    baseCourse,
     course,
     probs: {
       ...probs,
@@ -176,5 +199,9 @@ export function buildPitchExecutionContext({
 
     rawOSwingRate: probs.oSwingRate,
     adjustedOSwingRate: effectiveOSwingRate,
+
+    mistakeRate,
+    isMistake,
+    drift,
   };
 }

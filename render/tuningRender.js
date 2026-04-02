@@ -296,19 +296,37 @@ function formatPct(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function buildOswingDebugLine(lastPitch) {
-  if (
-    typeof lastPitch?.rawOSwingRate !== "number" &&
-    typeof lastPitch?.adjustedOSwingRate !== "number"
-  ) {
-    return "";
+function buildBallDebugLine(lastPitch) {
+  const parts = [];
+  const ballType = lastPitch?.ballTypeLabel || lastPitch?.ballType || null;
+
+  if (ballType) {
+    parts.push(ballType);
   }
 
-  const raw = formatPct(lastPitch?.rawOSwingRate);
-  const adj = formatPct(lastPitch?.adjustedOSwingRate);
-  const ballType = lastPitch?.ballTypeLabel || lastPitch?.ballType || "-";
+  if (
+    typeof lastPitch?.rawOSwingRate === "number" ||
+    typeof lastPitch?.adjustedOSwingRate === "number"
+  ) {
+    parts.push(
+      `O-Swing ${formatPct(lastPitch?.rawOSwingRate)}→${formatPct(
+        lastPitch?.adjustedOSwingRate
+      )}`
+    );
+  }
 
-  return ` / ${ballType} / O-Swing ${raw}→${adj}`;
+  if (
+    typeof lastPitch?.rawOContactRate === "number" ||
+    typeof lastPitch?.adjustedOContactRate === "number"
+  ) {
+    parts.push(
+      `O-Contact ${formatPct(lastPitch?.rawOContactRate)}→${formatPct(
+        lastPitch?.adjustedOContactRate
+      )}`
+    );
+  }
+
+  return parts.length ? ` / ${parts.join(" / ")}` : "";
 }
 
 function buildStrikeDebugLine(lastPitch) {
@@ -358,10 +376,10 @@ function renderZone(state, dom) {
     const course = lastPitch.course || "-";
     const resultText = lastPitch.resultText || "-";
 
-    const oswingLine = !lastPitch?.isStrike ? buildOswingDebugLine(lastPitch) : "";
+    const ballLine = !lastPitch?.isStrike ? buildBallDebugLine(lastPitch) : "";
     const strikeLine = lastPitch?.isStrike ? buildStrikeDebugLine(lastPitch) : "";
 
-    dom.zoneText.textContent = `${pitchType} / ${course} / ${resultText}${oswingLine}${strikeLine}`;
+    dom.zoneText.textContent = `${pitchType} / ${course} / ${resultText}${ballLine}${strikeLine}`;
   }
 }
 

@@ -3,12 +3,10 @@ function clamp(value, min, max) {
 }
 
 function weightedChoiceObject(weights, random = Math.random) {
-  const entries = Object.entries(weights || {}).filter(
-    ([, value]) => Number.isFinite(value) && value > 0
-  );
+  const entries = Object.entries(weights).filter(([, value]) => value > 0);
 
-  if (entries.length === 0) {
-    return null;
+  if (!entries.length) {
+    return Object.keys(weights)[0] || null;
   }
 
   const total = entries.reduce((sum, [, value]) => sum + value, 0);
@@ -24,50 +22,150 @@ function weightedChoiceObject(weights, random = Math.random) {
   return entries[entries.length - 1][0];
 }
 
-export function isStrikeCell(row, col) {
-  return row >= 1 && row <= 3 && col >= 1 && col <= 3;
+export function getCourseGrade(row, col) {
+  const inStrikeZone = row >= 1 && row <= 3 && col >= 1 && col <= 3;
+  if (!inStrikeZone) return "C";
+
+  const isCenter = row === 2 && col === 2;
+  if (isCenter) return "C";
+
+  const isCorner =
+    (row === 1 || row === 3) &&
+    (col === 1 || col === 3);
+
+  if (isCorner) return "A";
+  return "B";
 }
 
-export function getCourseGrade(row, col) {
-  if (!isStrikeCell(row, col)) {
-    return "Ball";
+export function getPitchTypeBallQualityProfile(pitchName) {
+  return {
+    fourSeam: { obvious: 0.45, edge: 0.25, chaseable: 0.30, edgeHighBase: 0.50 },
+    slider: { obvious: 0.30, edge: 0.30, chaseable: 0.40, edgeHighBase: 0.45 },
+    curve: { obvious: 0.35, edge: 0.30, chaseable: 0.35, edgeHighBase: 0.36 },
+    fork: { obvious: 0.20, edge: 0.25, chaseable: 0.55, edgeHighBase: 0.24 },
+  }[pitchName] || { obvious: 0.40, edge: 0.30, chaseable: 0.30, edgeHighBase: 0.40 };
+}
+
+export function getBallDistributionByCount(pitchName, countState) {
+  const base = getPitchTypeBallQualityProfile(pitchName);
+  let { obvious, chaseable, edge } = base;
+
+  switch (countState) {
+    case "twoStrike":
+      chaseable += 0.10;
+      edge -= 0.06;
+      obvious -= 0.04;
+      break;
+    case "pitcherAhead":
+      chaseable += 0.06;
+      edge -= 0.03;
+      obvious -= 0.03;
+      break;
+    case "batterAhead":
+      edge += 0.06;
+      chaseable -= 0.06;
+      break;
+    default:
+      break;
   }
 
-  if (row === 2 && col === 2) {
-    return "C";
+  obvious = Math.max(0.03, obvious);
+  chaseable = Math.max(0.03, chaseable);
+  edge = Math.max(0.03, edge);
+
+  const total = obvious + chaseable + edge;
+
+  return {
+    obvious: obvious / total,
+    chaseable: chaseable / total,
+    edge: edge / total,
+    edgeHighBase: base.edgeHighBase,
+  };
+}
+
+export function controlToMistakeRate(controlValue, pitchName = null) {
+  const control = clamp(Number(controlValue) || 1, 1, 100);
+  const x = (control - 50) / 50;
+
+  const pitchAdj = {
+    fourSeam: -0.18,
+    curve: -0.05,
+    slider: 0.10,
+    fork: 0.24,
+  }[pitchName] || 0;
+
+  const adjustedX = clamp(x - pitchAdj, -1.3, 1.3);
+  return clamp(0.03 * Math.exp(-1.5 * adjustedX), 0.005, 0.15);
+}
+
+export function determineDrift({
+  pitchName,
+  controlValue,
+  isMistake,
+  random = Math.random,
+}) {
+  const control = clamp(Number(controlValue) || 50, 1, 100);
+  const controlScore = (control - 50) / 50;
+
+  let p2 = 0.04;
+  let p1 = 0.18;
+
+  const pitchAdj = {
+    fourSeam: { p2: -0.01, p1: -0.03 },
+    curve: { p2: 0.00, p1: 0.01 },
+    slider: { p2: 0.01, p1: 0.03 },
+    fork: { p2: 0.03, p1: 0.06 },
+  }[pitchName] || { p2: 0, p1: 0 };
+
+  p2 += pitchAdj.p2;
+  p1 += pitchAdj.p1;
+
+  p2 += (-controlScore) * 0.04;
+  p1 += (-controlScore) * 0.08;
+
+  if (isMistake) {
+    p2 += 0.22;
+    p1 += 0.20;
   }
 
-  if (
-    (row === 1 && col === 2) ||
-    (row === 2 && col === 1) ||
-    (row === 2 && col === 3) ||
-    (row === 3 && col === 2)
-  ) {
+  p2 = clamp(p2, 0.01, 0.50);
+  p1 = clamp(p1, 0.05, 0.70);
+
+  const roll = random();
+  if (roll < p2) return 2;
+  if (roll < p2 + p1) return 1;
+  return 0;
+}
+
+export function applyDriftToCourse(course, drift, isMistake, random = Math.random) {
+  let effectiveDrift = drift;
+  if (isMistake) effectiveDrift += 1;
+
+  if (effectiveDrift <= 0) return course;
+
+  if (course === "A") {
+    if (effectiveDrift >= 2) return random() < 0.75 ? "C" : "B";
     return "B";
   }
 
-  return "A";
+  if (course === "B") {
+    if (effectiveDrift >= 2) return "C";
+    return random() < 0.65 ? "C" : "B";
+  }
+
+  return "C";
 }
 
 export function classifyStrikeType(
   row,
   col,
-  pitchType,
+  pitchName,
   controlValue,
   drift = 0,
   isMistake = false,
   random = Math.random
 ) {
   const course = getCourseGrade(row, col);
-
-  if (course === "Ball") {
-    return {
-      strikeType: null,
-      strikeTypeLabel: null,
-      strikeJudgeDifficulty: 0,
-      borderLikelihood: 0,
-    };
-  }
 
   if (course === "C") {
     return {
@@ -78,18 +176,15 @@ export function classifyStrikeType(
     };
   }
 
-  const controlN = clamp(((Number(controlValue) || 50) - 50) / 50, -1, 1);
-
-  const pitchEdgeAdj =
-    {
-      fourSeam: -0.02,
-      curve: 0.02,
-      slider: 0.03,
-      fork: 0.05,
-    }[pitchType] || 0;
+  const controlN = clamp((controlValue - 50) / 50, -1, 1);
+  const pitchEdgeAdj = {
+    fourSeam: -0.02,
+    curve: 0.02,
+    slider: 0.03,
+    fork: 0.05,
+  }[pitchName] || 0;
 
   let probs;
-
   if (course === "B") {
     probs = {
       meat: 0.24 - controlN * 0.04,
@@ -127,150 +222,35 @@ export function classifyStrikeType(
     probs.razor -= 0.06;
   }
 
-  probs.meat = Math.max(0.001, probs.meat);
-  probs.normal = Math.max(0.001, probs.normal);
-  probs.borderline = Math.max(0.001, probs.borderline);
-  probs.razor = Math.max(0.001, probs.razor);
+  const strikeType = weightedChoiceObject(probs, random);
 
-  const strikeType = weightedChoiceObject(probs, random) || "normal";
-
-  const typeMap = {
-    meat: {
-      label: "あからさまなストライク",
-      judge: 0.02,
-      borderLikelihood: 0.0,
-    },
-    normal: {
-      label: "普通のストライク",
-      judge: 0.18,
-      borderLikelihood: 0.12,
-    },
-    borderline: {
-      label: "きわどいストライク",
-      judge: 0.30,
-      borderLikelihood: 0.30,
-    },
-    razor: {
-      label: "ギリギリのストライク",
-      judge: 0.52,
-      borderLikelihood: 0.50,
-    },
+  const map = {
+    meat: { label: "あからさまなストライク", judge: 0.02, borderLikelihood: 0.00 },
+    normal: { label: "普通のストライク", judge: 0.18, borderLikelihood: 0.12 },
+    borderline: { label: "きわどいストライク", judge: 0.30, borderLikelihood: 0.30 },
+    razor: { label: "ギリギリのストライク", judge: 0.52, borderLikelihood: 0.50 },
   };
 
   return {
     strikeType,
-    strikeTypeLabel: typeMap[strikeType].label,
-    strikeJudgeDifficulty: typeMap[strikeType].judge,
-    borderLikelihood: typeMap[strikeType].borderLikelihood,
+    strikeTypeLabel: map[strikeType].label,
+    strikeJudgeDifficulty: map[strikeType].judge,
+    borderLikelihood: map[strikeType].borderLikelihood,
   };
-}
-
-export function getPitchTypeBallQualityProfile(pitchType) {
-  return (
-    {
-      fourSeam: {
-        obvious: 0.45,
-        edge: 0.25,
-        chaseable: 0.30,
-        edgeHighBase: 0.50,
-      },
-      slider: {
-        obvious: 0.30,
-        edge: 0.30,
-        chaseable: 0.40,
-        edgeHighBase: 0.45,
-      },
-      curve: {
-        obvious: 0.35,
-        edge: 0.30,
-        chaseable: 0.35,
-        edgeHighBase: 0.36,
-      },
-      fork: {
-        obvious: 0.20,
-        edge: 0.25,
-        chaseable: 0.55,
-        edgeHighBase: 0.24,
-      },
-    }[pitchType] || {
-      obvious: 0.50,
-      edge: 0.30,
-      chaseable: 0.20,
-      edgeHighBase: 0.40,
-    }
-  );
-}
-
-export function getBallDistributionByCount(pitchType, countState) {
-  const base = getPitchTypeBallQualityProfile(pitchType);
-  let { obvious, chaseable, edge } = base;
-
-  switch (countState) {
-    case "twoStrike":
-      chaseable += 0.10;
-      edge -= 0.06;
-      obvious -= 0.04;
-      break;
-    case "pitcherAhead":
-      chaseable += 0.06;
-      edge -= 0.03;
-      obvious -= 0.03;
-      break;
-    case "batterAhead":
-      edge += 0.06;
-      chaseable -= 0.06;
-      break;
-    default:
-      break;
-  }
-
-  obvious = Math.max(0.03, obvious);
-  chaseable = Math.max(0.03, chaseable);
-  edge = Math.max(0.03, edge);
-
-  const total = obvious + chaseable + edge;
-
-  return {
-    obvious: obvious / total,
-    chaseable: chaseable / total,
-    edge: edge / total,
-    edgeHighBase: base.edgeHighBase,
-  };
-}
-
-export function getCountState(balls, strikes) {
-  if (strikes >= 2) return "twoStrike";
-  if (balls > strikes) return "batterAhead";
-  if (strikes > balls) return "pitcherAhead";
-  return "neutral";
 }
 
 export function classifyBallType(
   row,
   col,
-  pitchType,
-  balls,
-  strikes,
+  target,
+  pitchName,
+  controlValue,
   drift = 0,
   isMistake = false,
   random = Math.random
 ) {
-  if (row === null || col === null) {
-    return {
-      ballType: null,
-      ballTypeLabel: null,
-      obviousBall: false,
-      edgeBall: false,
-      chaseableBall: false,
-      targetObviousBallRate: 0,
-      targetEdgeBallRate: 0,
-      targetChaseableBallRate: 0,
-      targetEdgeHighRate: 0,
-    };
-  }
-
-  const countState = getCountState(balls, strikes);
-  const dist = getBallDistributionByCount(pitchType, countState);
+  const countState = target?.countState || "neutral";
+  const dist = getBallDistributionByCount(pitchName, countState);
 
   const isNearZoneRing =
     ((row >= 1 && row <= 3) && (col === 0 || col === 4)) ||
@@ -300,25 +280,25 @@ export function classifyBallType(
     chaseable -= 0.03;
   }
 
-  if (pitchType === "fork") {
+  if (pitchName === "fork") {
     chaseable += 0.05;
     obvious -= 0.02;
     edge -= 0.03;
   }
 
-  if (pitchType === "fourSeam") {
+  if (pitchName === "fourSeam") {
     edge += 0.04;
     chaseable -= 0.02;
     obvious -= 0.02;
   }
 
-  if (pitchType === "slider") {
+  if (pitchName === "slider") {
     chaseable += 0.03;
     obvious -= 0.01;
     edge -= 0.02;
   }
 
-  if (pitchType === "curve") {
+  if (pitchName === "curve") {
     obvious += 0.02;
     edge -= 0.01;
     chaseable -= 0.01;
@@ -342,36 +322,38 @@ export function classifyBallType(
   const r = random();
   let ballType = "edge_low";
   let obviousBall = false;
-  let ballTypeLabel = "際どいボール（低め）";
-
   let edgeHighChance = dist.edgeHighBase;
 
   if (r < obvious) {
     ballType = "obvious";
-    ballTypeLabel = "明確なボール";
     obviousBall = true;
   } else if (r < obvious + chaseable) {
     ballType = "chaseable";
-    ballTypeLabel = "誘い球";
   } else {
     if (isNearZoneRing) edgeHighChance += 0.08;
-    if (pitchType === "fourSeam") edgeHighChance += 0.06;
-    if (pitchType === "fork") edgeHighChance -= 0.05;
+    if (pitchName === "fourSeam") edgeHighChance += 0.06;
+    if (pitchName === "fork") edgeHighChance -= 0.05;
     edgeHighChance = clamp(edgeHighChance, 0.20, 0.72);
     ballType = random() < edgeHighChance ? "edge_high" : "edge_low";
-    ballTypeLabel =
-      ballType === "edge_high" ? "際どいボール（高め）" : "際どいボール（低め）";
   }
+
+  const labelMap = {
+    obvious: "明確なボール",
+    chaseable: "誘い球",
+    edge_high: "際どいボール（高め）",
+    edge_low: "際どいボール（低め）",
+  };
 
   return {
     ballType,
-    ballTypeLabel,
+    ballTypeLabel: labelMap[ballType] || ballType,
     obviousBall,
-    edgeBall: !obviousBall && ballType !== "chaseable",
+    edgeBall: !obviousBall,
     chaseableBall: ballType === "chaseable",
-    targetObviousBallRate: obvious,
-    targetEdgeBallRate: edge,
-    targetChaseableBallRate: chaseable,
+    obviousBallShare: obvious,
+    targetObviousBallRate: dist.obvious,
+    targetEdgeBallRate: dist.edge,
+    targetChaseableBallRate: dist.chaseable,
     targetEdgeHighRate: dist.edgeHighBase,
   };
 }
