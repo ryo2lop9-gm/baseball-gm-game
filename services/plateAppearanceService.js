@@ -4,6 +4,11 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function formatPct(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 function buildTakeStrikeLogText(batter, state, strikeTypeLabel) {
   const suffix = strikeTypeLabel ? `・${strikeTypeLabel}` : "";
   return `${batter.name}: 見逃しストライク${suffix} (${state.balls}-${state.strikes})`;
@@ -12,6 +17,37 @@ function buildTakeStrikeLogText(batter, state, strikeTypeLabel) {
 function buildBallLogText(batter, state, ballTypeLabel) {
   const suffix = ballTypeLabel ? `・${ballTypeLabel}` : "";
   return `${batter.name}: ボール${suffix} (${state.balls}-${state.strikes})`;
+}
+
+function buildPitchQualityDebugText({ isStrike, probs, strikeTypeLabel, ballTypeLabel, ballType }) {
+  const parts = [];
+
+  if (isStrike) {
+    if (strikeTypeLabel) {
+      parts.push(`strikeType=${strikeTypeLabel}`);
+    }
+    if (typeof probs?.strikeJudgeDifficulty === "number") {
+      parts.push(`judge=${probs.strikeJudgeDifficulty.toFixed(2)}`);
+    }
+    if (typeof probs?.borderLikelihood === "number") {
+      parts.push(`border=${probs.borderLikelihood.toFixed(2)}`);
+    }
+  } else {
+    if (ballTypeLabel) {
+      parts.push(`ballType=${ballTypeLabel}`);
+    } else if (ballType) {
+      parts.push(`ballType=${ballType}`);
+    }
+
+    if (typeof probs?.rawOSwingRate === "number") {
+      parts.push(`O-Swing raw=${formatPct(probs.rawOSwingRate)}`);
+    }
+    if (typeof probs?.adjustedOSwingRate === "number") {
+      parts.push(`adj=${formatPct(probs.adjustedOSwingRate)}`);
+    }
+  }
+
+  return parts.length ? ` [${parts.join(" / ")}]` : "";
 }
 
 function calcTakeStrikeChance({
@@ -104,7 +140,17 @@ export function resolvePlateAppearanceResult({
 
         emitLog(
           options,
-          buildTakeStrikeLogText(batter, state, strikeTypeLabel)
+          `${buildTakeStrikeLogText(batter, state, strikeTypeLabel)}${buildPitchQualityDebugText({
+            isStrike,
+            probs: {
+              ...probs,
+              strikeJudgeDifficulty,
+              borderLikelihood,
+            },
+            strikeTypeLabel,
+            ballTypeLabel,
+            ballType,
+          })}`
         );
 
         if (state.strikes >= 3) {
@@ -118,10 +164,10 @@ export function resolvePlateAppearanceResult({
           });
 
           emitLog(options, `${batter.name}: 三振`);
-
           moveToNextBatter(state);
           finishPlateAppearanceState(state, options);
         }
+
         return;
       }
 
@@ -133,7 +179,17 @@ export function resolvePlateAppearanceResult({
 
       emitLog(
         options,
-        `${batter.name}: ボール判定に外れる・${strikeTypeLabel || "際どい球"} (${state.balls}-${state.strikes})`
+        `${batter.name}: ボール判定に外れる・${strikeTypeLabel || "際どい球"} (${state.balls}-${state.strikes})${buildPitchQualityDebugText({
+          isStrike,
+          probs: {
+            ...probs,
+            strikeJudgeDifficulty,
+            borderLikelihood,
+          },
+          strikeTypeLabel,
+          ballTypeLabel,
+          ballType,
+        })}`
       );
 
       if (state.balls >= 4) {
@@ -146,7 +202,6 @@ export function resolvePlateAppearanceResult({
         });
 
         emitLog(options, `${batter.name}: 四球${runs > 0 ? `。${runs}点` : ""}`);
-
         moveToNextBatter(state);
         finishPlateAppearanceState(state, options);
 
@@ -154,12 +209,22 @@ export function resolvePlateAppearanceResult({
           emitLog: (text) => emitLog(options, text),
         });
       }
+
       return;
     }
 
     state.balls += 1;
 
-    emitLog(options, buildBallLogText(batter, state, ballTypeLabel));
+    emitLog(
+      options,
+      `${buildBallLogText(batter, state, ballTypeLabel)}${buildPitchQualityDebugText({
+        isStrike,
+        probs,
+        strikeTypeLabel,
+        ballTypeLabel,
+        ballType,
+      })}`
+    );
 
     if (state.balls >= 4) {
       state.box[side].walks += 1;
@@ -171,7 +236,6 @@ export function resolvePlateAppearanceResult({
       });
 
       emitLog(options, `${batter.name}: 四球${runs > 0 ? `。${runs}点` : ""}`);
-
       moveToNextBatter(state);
       finishPlateAppearanceState(state, options);
 
@@ -179,6 +243,7 @@ export function resolvePlateAppearanceResult({
         emitLog: (text) => emitLog(options, text),
       });
     }
+
     return;
   }
 
@@ -190,7 +255,20 @@ export function resolvePlateAppearanceResult({
   if (!madeContact) {
     state.strikes += 1;
 
-    emitLog(options, `${batter.name}: 空振り (${state.balls}-${state.strikes})`);
+    emitLog(
+      options,
+      `${batter.name}: 空振り (${state.balls}-${state.strikes})${buildPitchQualityDebugText({
+        isStrike,
+        probs: {
+          ...probs,
+          strikeJudgeDifficulty,
+          borderLikelihood,
+        },
+        strikeTypeLabel,
+        ballTypeLabel,
+        ballType,
+      })}`
+    );
 
     if (state.strikes >= 3) {
       state.box[side].strikeouts += 1;
@@ -203,10 +281,10 @@ export function resolvePlateAppearanceResult({
       });
 
       emitLog(options, `${batter.name}: 三振`);
-
       moveToNextBatter(state);
       finishPlateAppearanceState(state, options);
     }
+
     return;
   }
 
@@ -219,7 +297,21 @@ export function resolvePlateAppearanceResult({
       resultText: "ファウル",
     });
 
-    emitLog(options, `${batter.name}: ファウル (${state.balls}-${state.strikes})`);
+    emitLog(
+      options,
+      `${batter.name}: ファウル (${state.balls}-${state.strikes})${buildPitchQualityDebugText({
+        isStrike,
+        probs: {
+          ...probs,
+          strikeJudgeDifficulty,
+          borderLikelihood,
+        },
+        strikeTypeLabel,
+        ballTypeLabel,
+        ballType,
+      })}`
+    );
+
     return;
   }
 

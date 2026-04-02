@@ -1,6 +1,8 @@
 function formatInningText(state) {
-  const inning = state.isComplete && state.finalInning ? state.finalInning : state.inning;
-  const half = state.isComplete && state.finalHalf ? state.finalHalf : state.half;
+  const inning =
+    state.isComplete && state.finalInning ? state.finalInning : state.inning;
+  const half =
+    state.isComplete && state.finalHalf ? state.finalHalf : state.half;
   return `${inning}回${half === "top" ? "表" : "裏"}`;
 }
 
@@ -53,16 +55,17 @@ function qocPctFromMap(qoc) {
 function getDisplayedPitcherName(state, side) {
   return (
     state?.activePitchers?.[side]?.name ||
-    (side === "away" ? state?.awayTeam?.startingPitcher?.name : state?.homeTeam?.startingPitcher?.name) ||
+    (side === "away"
+      ? state?.awayTeam?.startingPitcher?.name
+      : state?.homeTeam?.startingPitcher?.name) ||
     "-"
   );
 }
 
 function buildPlayerStatsTable(team) {
   const players = team?.lineup || [];
-
   if (!players.length) {
-    return '<div class="empty-note">選手データがありません。</div>';
+    return `<div>選手データがありません。</div>`;
   }
 
   return `
@@ -85,24 +88,25 @@ function buildPlayerStatsTable(team) {
       </thead>
       <tbody>
         ${players
-          .map(
-            (player) => `
+          .map((player) => {
+            const s = getDisplayedPlayerStats(player);
+            return `
               <tr>
                 <td>${player.name}</td>
-                <td>${getDisplayedPlayerStats(player).PA}</td>
-                <td>${getDisplayedPlayerStats(player).AB}</td>
-                <td>${getDisplayedPlayerStats(player).H}</td>
-                <td>${getDisplayedPlayerStats(player).doubles}</td>
-                <td>${getDisplayedPlayerStats(player).triples}</td>
-                <td>${getDisplayedPlayerStats(player).HR}</td>
-                <td>${getDisplayedPlayerStats(player).BB}</td>
-                <td>${getDisplayedPlayerStats(player).K}</td>
-                <td>${getDisplayedPlayerStats(player).RBI}</td>
-                <td>${getDisplayedPlayerStats(player).R}</td>
-                <td>${safeAvg(getDisplayedPlayerStats(player).H, getDisplayedPlayerStats(player).AB)}</td>
+                <td>${s.PA}</td>
+                <td>${s.AB}</td>
+                <td>${s.H}</td>
+                <td>${s.doubles}</td>
+                <td>${s.triples}</td>
+                <td>${s.HR}</td>
+                <td>${s.BB}</td>
+                <td>${s.K}</td>
+                <td>${s.RBI}</td>
+                <td>${s.R}</td>
+                <td>${safeAvg(s.H, s.AB)}</td>
               </tr>
-            `
-          )
+            `;
+          })
           .join("")}
       </tbody>
     </table>
@@ -113,7 +117,7 @@ function buildQoCTable(title, qoc, pct) {
   const rows = ["Weak", "Topped", "Under", "Flare", "Solid", "Barrel"];
 
   return `
-    <div class="mini-table-title">${title}</div>
+    <h3>${title}</h3>
     <table>
       <thead>
         <tr>
@@ -168,7 +172,11 @@ function buildGameSummaryTable(state) {
 
 function buildSeasonSummaryTable(season) {
   if (!season) {
-    return '<div class="empty-note">まだシーズン結果がありません。</div>';
+    return `
+      <div>
+        まだシーズン結果がありません。
+      </div>
+    `;
   }
 
   return `
@@ -194,7 +202,9 @@ function buildSeasonSummaryTable(season) {
 
 function buildSeasonPlayerStatsTable(players) {
   if (!players || !players.length) {
-    return '<div class="empty-note">まだシーズン結果がありません。</div>';
+    return `
+      <div>まだシーズン結果がありません。</div>
+    `;
   }
 
   return `
@@ -217,24 +227,25 @@ function buildSeasonPlayerStatsTable(players) {
       </thead>
       <tbody>
         ${players
-          .map(
-            (player) => `
+          .map((player) => {
+            const s = getDisplayedPlayerStats(player);
+            return `
               <tr>
                 <td>${player.name}</td>
-                <td>${getDisplayedPlayerStats(player).PA}</td>
-                <td>${getDisplayedPlayerStats(player).AB}</td>
-                <td>${getDisplayedPlayerStats(player).H}</td>
-                <td>${getDisplayedPlayerStats(player).doubles}</td>
-                <td>${getDisplayedPlayerStats(player).triples}</td>
-                <td>${getDisplayedPlayerStats(player).HR}</td>
-                <td>${getDisplayedPlayerStats(player).BB}</td>
-                <td>${getDisplayedPlayerStats(player).K}</td>
-                <td>${getDisplayedPlayerStats(player).RBI}</td>
-                <td>${getDisplayedPlayerStats(player).R}</td>
-                <td>${safeAvg(getDisplayedPlayerStats(player).H, getDisplayedPlayerStats(player).AB)}</td>
+                <td>${s.PA}</td>
+                <td>${s.AB}</td>
+                <td>${s.H}</td>
+                <td>${s.doubles}</td>
+                <td>${s.triples}</td>
+                <td>${s.HR}</td>
+                <td>${s.BB}</td>
+                <td>${s.K}</td>
+                <td>${s.RBI}</td>
+                <td>${s.R}</td>
+                <td>${safeAvg(s.H, s.AB)}</td>
               </tr>
-            `
-          )
+            `;
+          })
           .join("")}
       </tbody>
     </table>
@@ -248,19 +259,28 @@ function renderCountLights(state, dom) {
 
   if (dom.ballLights) {
     dom.ballLights.innerHTML = ballLights
-      .map((n) => `<span class="count-light ball ${state.balls >= n ? "on" : ""}"></span>`)
+      .map(
+        (n) =>
+          `<span class="count-light ${state.balls >= n ? "on ball" : ""}"></span>`
+      )
       .join("");
   }
 
   if (dom.strikeLights) {
     dom.strikeLights.innerHTML = strikeLights
-      .map((n) => `<span class="count-light strike ${state.strikes >= n ? "on" : ""}"></span>`)
+      .map(
+        (n) =>
+          `<span class="count-light ${state.strikes >= n ? "on strike" : ""}"></span>`
+      )
       .join("");
   }
 
   if (dom.outLights) {
     dom.outLights.innerHTML = outLights
-      .map((n) => `<span class="count-light out ${state.outs >= n ? "on" : ""}"></span>`)
+      .map(
+        (n) =>
+          `<span class="count-light ${state.outs >= n ? "on out" : ""}"></span>`
+      )
       .join("");
   }
 }
@@ -271,6 +291,44 @@ function renderHeaderBases(state, dom) {
   if (dom.headerBase3) dom.headerBase3.classList.toggle("on", Boolean(state.bases.third));
 }
 
+function formatPct(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function buildOswingDebugLine(lastPitch) {
+  if (
+    typeof lastPitch?.rawOSwingRate !== "number" &&
+    typeof lastPitch?.adjustedOSwingRate !== "number"
+  ) {
+    return "";
+  }
+
+  const raw = formatPct(lastPitch?.rawOSwingRate);
+  const adj = formatPct(lastPitch?.adjustedOSwingRate);
+  const ballType = lastPitch?.ballTypeLabel || lastPitch?.ballType || "-";
+
+  return ` / ${ballType} / O-Swing ${raw}→${adj}`;
+}
+
+function buildStrikeDebugLine(lastPitch) {
+  if (!lastPitch?.isStrike) return "";
+
+  const parts = [];
+
+  if (lastPitch?.strikeTypeLabel) {
+    parts.push(lastPitch.strikeTypeLabel);
+  }
+  if (typeof lastPitch?.strikeJudgeDifficulty === "number") {
+    parts.push(`judge ${lastPitch.strikeJudgeDifficulty.toFixed(2)}`);
+  }
+  if (typeof lastPitch?.borderLikelihood === "number") {
+    parts.push(`border ${lastPitch.borderLikelihood.toFixed(2)}`);
+  }
+
+  return parts.length ? ` / ${parts.join(" / ")}` : "";
+}
+
 function renderZone(state, dom) {
   if (!dom.zoneGrid) return;
 
@@ -279,13 +337,17 @@ function renderZone(state, dom) {
   const hitCol = Number.isInteger(lastPitch.zoneCol) ? lastPitch.zoneCol : null;
 
   const cells = [];
+
   for (let row = 0; row < 5; row += 1) {
     for (let col = 0; col < 5; col += 1) {
       const isStrikeZone = row >= 1 && row <= 3 && col >= 1 && col <= 3;
       const isHit = row === hitRow && col === hitCol;
-      cells.push(
-        `<div class="zone-cell ${isStrikeZone ? "strike-zone" : "ball-zone"} ${isHit ? "hit" : ""}"></div>`
-      );
+
+      cells.push(`
+        <div class="zone-cell ${isStrikeZone ? "strike-zone" : ""} ${isHit ? "hit" : ""}">
+          ${isHit ? "●" : ""}
+        </div>
+      `);
     }
   }
 
@@ -295,7 +357,11 @@ function renderZone(state, dom) {
     const pitchType = lastPitch.pitchType || "-";
     const course = lastPitch.course || "-";
     const resultText = lastPitch.resultText || "-";
-    dom.zoneText.textContent = `${pitchType} / ${course} / ${resultText}`;
+
+    const oswingLine = !lastPitch?.isStrike ? buildOswingDebugLine(lastPitch) : "";
+    const strikeLine = lastPitch?.isStrike ? buildStrikeDebugLine(lastPitch) : "";
+
+    dom.zoneText.textContent = `${pitchType} / ${course} / ${resultText}${oswingLine}${strikeLine}`;
   }
 }
 
@@ -330,20 +396,15 @@ export function renderLineups(state, dom) {
   if (!dom.lineupBody) return;
 
   const rows = [];
+
   for (let i = 0; i < 9; i += 1) {
     const away = state.awayTeam.lineup[i];
     const home = state.homeTeam.lineup[i];
 
     rows.push(`
       <tr>
-        <td>
-          <strong>${i + 1}. ${away.name}</strong><br>
-          C${away.ratings.contact} / P${away.ratings.power} / E${away.ratings.eye}
-        </td>
-        <td>
-          <strong>${i + 1}. ${home.name}</strong><br>
-          C${home.ratings.contact} / P${home.ratings.power} / E${home.ratings.eye}
-        </td>
+        <td>${i + 1}. ${away.name}<br>C${away.ratings.contact} / P${away.ratings.power} / E${away.ratings.eye}</td>
+        <td>${i + 1}. ${home.name}<br>C${home.ratings.contact} / P${home.ratings.power} / E${home.ratings.eye}</td>
       </tr>
     `);
   }
@@ -357,6 +418,7 @@ export function clearLog(dom) {
 
 export function appendLog(dom, text) {
   if (!dom.log) return;
+
   const line = document.createElement("div");
   line.className = "log-line";
   line.textContent = text;
@@ -404,7 +466,9 @@ export function renderTuningGameTables(state, dom) {
 
 export function renderTuningSeasonTables(season, dom) {
   if (dom.tuningSeasonHeadline) {
-    dom.tuningSeasonHeadline.textContent = season ? `${season.games}試合シミュレーション` : "シーズン結果";
+    dom.tuningSeasonHeadline.textContent = season
+      ? `${season.games}試合シミュレーション`
+      : "シーズン結果";
   }
 
   if (dom.tuningSeasonGamesValue) {
@@ -424,20 +488,24 @@ export function renderTuningSeasonTables(season, dom) {
   if (dom.tuningSeasonAwayQoCTable) {
     dom.tuningSeasonAwayQoCTable.innerHTML = season
       ? buildQoCTable(`${season.awayName} シーズンQoC`, season.away.qoc, season.awayQoCPct)
-      : '<div class="empty-note">まだシーズン結果がありません。</div>';
+      : `<div>まだシーズン結果がありません。</div>`;
   }
 
   if (dom.tuningSeasonHomeQoCTable) {
     dom.tuningSeasonHomeQoCTable.innerHTML = season
       ? buildQoCTable(`${season.homeName} シーズンQoC`, season.home.qoc, season.homeQoCPct)
-      : '<div class="empty-note">まだシーズン結果がありません。</div>';
+      : `<div>まだシーズン結果がありません。</div>`;
   }
 
   if (dom.tuningSeasonAwayPlayerStatsTable) {
-    dom.tuningSeasonAwayPlayerStatsTable.innerHTML = buildSeasonPlayerStatsTable(season?.awayPlayers || []);
+    dom.tuningSeasonAwayPlayerStatsTable.innerHTML = buildSeasonPlayerStatsTable(
+      season?.awayPlayers || []
+    );
   }
 
   if (dom.tuningSeasonHomePlayerStatsTable) {
-    dom.tuningSeasonHomePlayerStatsTable.innerHTML = buildSeasonPlayerStatsTable(season?.homePlayers || []);
+    dom.tuningSeasonHomePlayerStatsTable.innerHTML = buildSeasonPlayerStatsTable(
+      season?.homePlayers || []
+    );
   }
 }

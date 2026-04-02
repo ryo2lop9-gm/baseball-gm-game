@@ -106,35 +106,32 @@ export function buildPitchExecutionContext({
   );
 
   const isStrike = random() < probs.strikeRate;
-
   const [resolvedZoneRow, resolvedZoneCol] = chooseZoneSpot(course, isStrike);
 
-  const strikeInfo =
-    isStrike
-      ? classifyStrikeType(
-          resolvedZoneRow,
-          resolvedZoneCol,
-          pitchType,
-          pitcher?.ratings?.control || 50,
-          0,
-          false,
-          random
-        )
-      : getEmptyStrikeInfo();
+  const strikeInfo = isStrike
+    ? classifyStrikeType(
+        resolvedZoneRow,
+        resolvedZoneCol,
+        pitchType,
+        pitcher?.ratings?.control || 50,
+        0,
+        false,
+        random
+      )
+    : getEmptyStrikeInfo();
 
-  const ballInfo =
-    !isStrike
-      ? classifyBallType(
-          resolvedZoneRow,
-          resolvedZoneCol,
-          pitchType,
-          balls,
-          strikes,
-          0,
-          false,
-          random
-        )
-      : getEmptyBallInfo();
+  const ballInfo = !isStrike
+    ? classifyBallType(
+        resolvedZoneRow,
+        resolvedZoneCol,
+        pitchType,
+        balls,
+        strikes,
+        0,
+        false,
+        random
+      )
+    : getEmptyBallInfo();
 
   const effectiveOSwingRate = clamp(
     probs.oSwingRate + calcBallTypeOSwingAdjustment(ballInfo, batter),
@@ -171,9 +168,13 @@ export function buildPitchExecutionContext({
     obviousBall: ballInfo.obviousBall,
     edgeBall: ballInfo.edgeBall,
     chaseableBall: ballInfo.chaseableBall,
+
     targetObviousBallRate: ballInfo.targetObviousBallRate,
     targetEdgeBallRate: ballInfo.targetEdgeBallRate,
     targetChaseableBallRate: ballInfo.targetChaseableBallRate,
     targetEdgeHighRate: ballInfo.targetEdgeHighRate,
+
+    rawOSwingRate: probs.oSwingRate,
+    adjustedOSwingRate: effectiveOSwingRate,
   };
 }

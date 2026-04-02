@@ -125,6 +125,8 @@ export function stepPitchMutable(state, rawOptions = {}) {
     targetEdgeBallRate,
     targetChaseableBallRate,
     targetEdgeHighRate,
+    rawOSwingRate,
+    adjustedOSwingRate,
   } = buildPitchExecutionContext({
     batter,
     pitcher,
@@ -146,10 +148,12 @@ export function stepPitchMutable(state, rawOptions = {}) {
     resultText: "",
     zoneRow,
     zoneCol,
+
     strikeType,
     strikeTypeLabel,
     strikeJudgeDifficulty,
     borderLikelihood,
+
     ballType,
     ballTypeLabel,
     obviousBall,
@@ -159,8 +163,10 @@ export function stepPitchMutable(state, rawOptions = {}) {
     targetEdgeBallRate,
     targetChaseableBallRate,
     targetEdgeHighRate,
-    rawOSwingRate: probs?.rawOSwingRate,
-    adjustedOSwingRate: probs?.adjustedOSwingRate,
+
+    rawOSwingRate: rawOSwingRate ?? probs?.rawOSwingRate ?? null,
+    adjustedOSwingRate:
+      adjustedOSwingRate ?? probs?.adjustedOSwingRate ?? null,
   });
 
   resolvePlateAppearanceResult({
@@ -223,7 +229,10 @@ export function stepPitchMutable(state, rawOptions = {}) {
   return state;
 }
 
-export function simulateGameMutable(state, options = createFastSimulationOptions()) {
+export function simulateGameMutable(
+  state,
+  options = createFastSimulationOptions()
+) {
   while (!state.isComplete) {
     stepPitchMutable(state, options);
   }
