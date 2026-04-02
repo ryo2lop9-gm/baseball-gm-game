@@ -3,6 +3,10 @@ import {
   classifyBallType,
 } from "./pitchQualityService.js";
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 export function choosePitchType(pitcher, random = Math.random) {
   const mix = pitcher?.pitchMix || {
     fourSeam: 0.45,
@@ -47,6 +51,37 @@ function getEmptyBallInfo() {
   };
 }
 
+function calcBallTypeOSwingAdjustment(ballInfo, batter) {
+  const eye = Number(batter?.ratings?.eye || batter?.eye || 50);
+  const eyeScore = clamp((eye - 50) / 50, -1, 1);
+
+  let adjustment = 0;
+
+  switch (ballInfo?.ballType) {
+    case "obvious":
+      adjustment -= 0.10;
+      adjustment -= Math.max(0, eyeScore) * 0.03;
+      break;
+
+    case "chaseable":
+      adjustment += 0.08;
+      adjustment -= Math.max(0, eyeScore) * 0.02;
+      adjustment += Math.max(0, -eyeScore) * 0.02;
+      break;
+
+    case "edge_high":
+    case "edge_low":
+      adjustment += 0.03;
+      adjustment -= Math.max(0, eyeScore) * 0.015;
+      break;
+
+    default:
+      break;
+  }
+
+  return adjustment;
+}
+
 export function buildPitchExecutionContext({
   batter,
   pitcher,
@@ -71,18 +106,14 @@ export function buildPitchExecutionContext({
   );
 
   const isStrike = random() < probs.strikeRate;
-  const swingRate = isStrike ? probs.zSwingRate : probs.oSwingRate;
-  const swung = random() < swingRate;
 
-  const [zoneRow, zoneCol] = shouldPatchLastPitch
-    ? chooseZoneSpot(course, isStrike)
-    : [null, null];
+  const [resolvedZoneRow, resolvedZoneCol] = chooseZoneSpot(course, isStrike);
 
   const strikeInfo =
-    isStrike && zoneRow !== null && zoneCol !== null
+    isStrike
       ? classifyStrikeType(
-          zoneRow,
-          zoneCol,
+          resolvedZoneRow,
+          resolvedZoneCol,
           pitchType,
           pitcher?.ratings?.control || 50,
           0,
@@ -92,10 +123,10 @@ export function buildPitchExecutionContext({
       : getEmptyStrikeInfo();
 
   const ballInfo =
-    !isStrike && zoneRow !== null && zoneCol !== null
+    !isStrike
       ? classifyBallType(
-          zoneRow,
-          zoneCol,
+          resolvedZoneRow,
+          resolvedZoneCol,
           pitchType,
           balls,
           strikes,
@@ -105,10 +136,26 @@ export function buildPitchExecutionContext({
         )
       : getEmptyBallInfo();
 
+  const effectiveOSwingRate = clamp(
+    probs.oSwingRate + calcBallTypeOSwingAdjustment(ballInfo, batter),
+    0.01,
+    0.95
+  );
+
+  const swingRate = isStrike ? probs.zSwingRate : effectiveOSwingRate;
+  const swung = random() < swingRate;
+
+  const zoneRow = shouldPatchLastPitch ? resolvedZoneRow : null;
+  const zoneCol = shouldPatchLastPitch ? resolvedZoneCol : null;
+
   return {
     pitchType,
     course,
-    probs,
+    probs: {
+      ...probs,
+      rawOSwingRate: probs.oSwingRate,
+      adjustedOSwingRate: effectiveOSwingRate,
+    },
     isStrike,
     swung,
     zoneRow,

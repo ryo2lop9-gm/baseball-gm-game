@@ -159,6 +159,8 @@ export function stepPitchMutable(state, rawOptions = {}) {
     targetEdgeBallRate,
     targetChaseableBallRate,
     targetEdgeHighRate,
+    rawOSwingRate: probs?.rawOSwingRate,
+    adjustedOSwingRate: probs?.adjustedOSwingRate,
   });
 
   resolvePlateAppearanceResult({

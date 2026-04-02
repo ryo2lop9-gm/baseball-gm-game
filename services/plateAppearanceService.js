@@ -28,12 +28,8 @@ function calcTakeStrikeChance({
   const eyeScore = clamp((eye - 50) / 50, -1, 1);
 
   let chance = 1.0;
-
-  // きわどい球ほど見逃しストライクになりにくくする
   chance -= strikeJudgeDifficulty * 0.18;
   chance -= borderLikelihood * 0.08;
-
-  // 選球眼が高いほど際どい球を見逃しストライクにされにくい
   chance -= eyeScore * strikeJudgeDifficulty * 0.10;
   chance -= eyeScore * borderLikelihood * 0.05;
 
@@ -88,6 +84,8 @@ export function resolvePlateAppearanceResult({
     targetEdgeBallRate,
     targetChaseableBallRate,
     targetEdgeHighRate,
+    rawOSwingRate: probs?.rawOSwingRate,
+    adjustedOSwingRate: probs?.adjustedOSwingRate,
   });
 
   if (!swung) {
@@ -161,10 +159,7 @@ export function resolvePlateAppearanceResult({
 
     state.balls += 1;
 
-    emitLog(
-      options,
-      buildBallLogText(batter, state, ballTypeLabel)
-    );
+    emitLog(options, buildBallLogText(batter, state, ballTypeLabel));
 
     if (state.balls >= 4) {
       state.box[side].walks += 1;
@@ -190,9 +185,7 @@ export function resolvePlateAppearanceResult({
   const contactRate = isStrike ? probs.zContactRate : probs.oContactRate;
   const madeContact = random() < contactRate;
 
-  emitLastPitchPatch(options, {
-    madeContact,
-  });
+  emitLastPitchPatch(options, { madeContact });
 
   if (!madeContact) {
     state.strikes += 1;
