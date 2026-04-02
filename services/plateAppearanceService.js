@@ -19,7 +19,13 @@ function buildBallLogText(batter, state, ballTypeLabel) {
   return `${batter.name}: ボール${suffix} (${state.balls}-${state.strikes})`;
 }
 
-function buildPitchQualityDebugText({ isStrike, probs, strikeTypeLabel, ballTypeLabel, ballType }) {
+function buildPitchQualityDebugText({
+  isStrike,
+  probs,
+  strikeTypeLabel,
+  ballTypeLabel,
+  ballType,
+}) {
   const parts = [];
 
   if (isStrike) {
@@ -44,6 +50,12 @@ function buildPitchQualityDebugText({ isStrike, probs, strikeTypeLabel, ballType
     }
     if (typeof probs?.adjustedOSwingRate === "number") {
       parts.push(`adj=${formatPct(probs.adjustedOSwingRate)}`);
+    }
+    if (typeof probs?.rawOContactRate === "number") {
+      parts.push(`O-Contact raw=${formatPct(probs.rawOContactRate)}`);
+    }
+    if (typeof probs?.adjustedOContactRate === "number") {
+      parts.push(`adjC=${formatPct(probs.adjustedOContactRate)}`);
     }
   }
 
@@ -70,6 +82,20 @@ function calcTakeStrikeChance({
   chance -= eyeScore * borderLikelihood * 0.05;
 
   return clamp(chance, 0.82, 1.0);
+}
+
+function calcBallTypeOContactAdjustment(ballType) {
+  switch (ballType) {
+    case "chaseable":
+      return 1.06;
+    case "obvious":
+      return 0.90;
+    case "edge_high":
+    case "edge_low":
+      return 0.97;
+    default:
+      return 1.0;
+  }
 }
 
 export function resolvePlateAppearanceResult({
@@ -122,6 +148,8 @@ export function resolvePlateAppearanceResult({
     targetEdgeHighRate,
     rawOSwingRate: probs?.rawOSwingRate,
     adjustedOSwingRate: probs?.adjustedOSwingRate,
+    rawOContactRate: probs?.rawOContactRate,
+    adjustedOContactRate: probs?.adjustedOContactRate,
   });
 
   if (!swung) {
@@ -140,7 +168,11 @@ export function resolvePlateAppearanceResult({
 
         emitLog(
           options,
-          `${buildTakeStrikeLogText(batter, state, strikeTypeLabel)}${buildPitchQualityDebugText({
+          `${buildTakeStrikeLogText(
+            batter,
+            state,
+            strikeTypeLabel
+          )}${buildPitchQualityDebugText({
             isStrike,
             probs: {
               ...probs,
@@ -179,7 +211,9 @@ export function resolvePlateAppearanceResult({
 
       emitLog(
         options,
-        `${batter.name}: ボール判定に外れる・${strikeTypeLabel || "際どい球"} (${state.balls}-${state.strikes})${buildPitchQualityDebugText({
+        `${batter.name}: ボール判定に外れる・${
+          strikeTypeLabel || "際どい球"
+        } (${state.balls}-${state.strikes})${buildPitchQualityDebugText({
           isStrike,
           probs: {
             ...probs,
@@ -247,8 +281,20 @@ export function resolvePlateAppearanceResult({
     return;
   }
 
-  const contactRate = isStrike ? probs.zContactRate : probs.oContactRate;
-  const madeContact = random() < contactRate;
+  const rawContactRate = isStrike ? probs.zContactRate : probs.oContactRate;
+
+  let adjustedContactRate = rawContactRate;
+  if (!isStrike) {
+    adjustedContactRate *= calcBallTypeOContactAdjustment(ballType);
+  }
+  adjustedContactRate = clamp(adjustedContactRate, 0.05, 0.98);
+
+  emitLastPitchPatch(options, {
+    rawOContactRate: !isStrike ? rawContactRate : null,
+    adjustedOContactRate: !isStrike ? adjustedContactRate : null,
+  });
+
+  const madeContact = random() < adjustedContactRate;
 
   emitLastPitchPatch(options, { madeContact });
 
@@ -263,6 +309,8 @@ export function resolvePlateAppearanceResult({
           ...probs,
           strikeJudgeDifficulty,
           borderLikelihood,
+          rawOContactRate: !isStrike ? rawContactRate : null,
+          adjustedOContactRate: !isStrike ? adjustedContactRate : null,
         },
         strikeTypeLabel,
         ballTypeLabel,
@@ -305,6 +353,8 @@ export function resolvePlateAppearanceResult({
           ...probs,
           strikeJudgeDifficulty,
           borderLikelihood,
+          rawOContactRate: !isStrike ? rawContactRate : null,
+          adjustedOContactRate: !isStrike ? adjustedContactRate : null,
         },
         strikeTypeLabel,
         ballTypeLabel,
