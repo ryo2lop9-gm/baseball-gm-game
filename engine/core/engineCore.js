@@ -127,6 +127,19 @@ export function stepPitchMutable(state, rawOptions = {}) {
     swung,
     zoneRow,
     zoneCol,
+    strikeType,
+    strikeTypeLabel,
+    strikeJudgeDifficulty,
+    borderLikelihood,
+    ballType,
+    ballTypeLabel,
+    obviousBall,
+    edgeBall,
+    chaseableBall,
+    targetObviousBallRate,
+    targetEdgeBallRate,
+    targetChaseableBallRate,
+    targetEdgeHighRate,
   } = buildPitchExecutionContext({
     batter,
     pitcher,
@@ -148,6 +161,19 @@ export function stepPitchMutable(state, rawOptions = {}) {
     resultText: "",
     zoneRow,
     zoneCol,
+    strikeType,
+    strikeTypeLabel,
+    strikeJudgeDifficulty,
+    borderLikelihood,
+    ballType,
+    ballTypeLabel,
+    obviousBall,
+    edgeBall,
+    chaseableBall,
+    targetObviousBallRate,
+    targetEdgeBallRate,
+    targetChaseableBallRate,
+    targetEdgeHighRate,
   });
 
   resolvePlateAppearanceResult({
@@ -159,6 +185,19 @@ export function stepPitchMutable(state, rawOptions = {}) {
     probs,
     isStrike,
     swung,
+    strikeType,
+    strikeTypeLabel,
+    strikeJudgeDifficulty,
+    borderLikelihood,
+    ballType,
+    ballTypeLabel,
+    obviousBall,
+    edgeBall,
+    chaseableBall,
+    targetObviousBallRate,
+    targetEdgeBallRate,
+    targetChaseableBallRate,
+    targetEdgeHighRate,
     options,
     random,
     emitLog,
@@ -180,7 +219,6 @@ export function stepPitchMutable(state, rawOptions = {}) {
   });
 
   const deltaOuts = Math.max(0, state.outs - outsBefore);
-
   if (pitcherUsage) pitcherUsage.outsRecorded += deltaOuts;
 
   maybeChangeSides(state, {
