@@ -1,59 +1,60 @@
-import { ZONE_CONFIG } from "../config/zoneConfig.js";
-
-function random() {
-  return Math.random();
-}
-
-function pickRandom(cells) {
-  if (!Array.isArray(cells) || cells.length === 0) {
+function pickOne(items, random = Math.random) {
+  if (!Array.isArray(items) || items.length === 0) {
     return [2, 2];
   }
-  return cells[Math.floor(random() * cells.length)];
+  const index = Math.floor(random() * items.length);
+  return items[index];
 }
 
-function pickWeightedStrikeSpot(group) {
-  if (!group) {
-    return pickRandom(ZONE_CONFIG.strike.Default);
+const STRIKE_SPOTS = {
+  A: [
+    [1, 1],
+    [1, 3],
+    [3, 1],
+    [3, 3],
+  ],
+  B: [
+    [1, 2],
+    [2, 1],
+    [2, 3],
+    [3, 2],
+  ],
+  C: [
+    [2, 2],
+  ],
+};
+
+const BALL_SPOTS = {
+  A: [
+    [0, 1],
+    [1, 0],
+    [0, 3],
+    [1, 4],
+    [3, 0],
+    [4, 1],
+    [3, 4],
+    [4, 3],
+  ],
+  B: [
+    [0, 2],
+    [2, 0],
+    [2, 4],
+    [4, 2],
+  ],
+  C: [
+    [0, 0],
+    [0, 4],
+    [4, 0],
+    [4, 4],
+  ],
+};
+
+export function chooseZoneSpot(course, isStrike, random = Math.random) {
+  const safeCourse = ["A", "B", "C"].includes(course) ? course : "B";
+
+  if (isStrike) {
+    return pickOne(STRIKE_SPOTS[safeCourse], random);
   }
 
-  const primary = Array.isArray(group.primary) ? group.primary : [];
-  const secondary = Array.isArray(group.secondary) ? group.secondary : [];
-  const primaryShare =
-    typeof group.primaryShare === "number" ? group.primaryShare : 0.7;
-
-  if (primary.length === 0 && secondary.length === 0) {
-    return pickRandom(ZONE_CONFIG.strike.Default);
-  }
-
-  if (primary.length === 0) {
-    return pickRandom(secondary);
-  }
-
-  if (secondary.length === 0) {
-    return pickRandom(primary);
-  }
-
-  return random() < primaryShare ? pickRandom(primary) : pickRandom(secondary);
-}
-
-export function chooseZoneSpot(course, isStrike) {
-  if (!isStrike) {
-    return random() < ZONE_CONFIG.ball.outerShare
-      ? pickRandom(ZONE_CONFIG.ball.outerCells)
-      : pickRandom(ZONE_CONFIG.ball.borderCells);
-  }
-
-  if (course === "A") {
-    return pickWeightedStrikeSpot(ZONE_CONFIG.strike.A);
-  }
-
-  if (course === "B") {
-    return pickWeightedStrikeSpot(ZONE_CONFIG.strike.B);
-  }
-
-  if (course === "C") {
-    return pickWeightedStrikeSpot(ZONE_CONFIG.strike.C);
-  }
-
-  return pickRandom(ZONE_CONFIG.strike.Default);
+  return pickOne(BALL_SPOTS[safeCourse], random);
 }

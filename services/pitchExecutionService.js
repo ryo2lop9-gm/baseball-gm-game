@@ -34,7 +34,7 @@ export function choosePitchType(pitcher, random = Math.random) {
 function getEmptyStrikeInfo() {
   return {
     strikeType: null,
-    strikeTypeLabel: null,
+    strikeTypeLabel: "",
     strikeJudgeDifficulty: 0,
     borderLikelihood: 0,
   };
@@ -43,14 +43,14 @@ function getEmptyStrikeInfo() {
 function getEmptyBallInfo() {
   return {
     ballType: null,
-    ballTypeLabel: null,
+    ballTypeLabel: "",
     obviousBall: false,
     edgeBall: false,
     chaseableBall: false,
-    targetObviousBallRate: 0,
-    targetEdgeBallRate: 0,
-    targetChaseableBallRate: 0,
-    targetEdgeHighRate: 0,
+    targetObviousBallRate: null,
+    targetEdgeBallRate: null,
+    targetChaseableBallRate: null,
+    targetEdgeHighRate: null,
   };
 }
 
@@ -74,6 +74,7 @@ function calcBallTypeOSwingAdjustment(ballInfo, batter) {
 
     case "edge_high":
     case "edge_low":
+    case "edge_side":
       adjustment += 0.03;
       adjustment -= Math.max(0, eyeScore) * 0.015;
       break;
@@ -128,7 +129,7 @@ export function buildPitchExecutionContext({
   );
 
   const isStrike = random() < probs.strikeRate;
-  const [resolvedZoneRow, resolvedZoneCol] = chooseZoneSpot(course, isStrike);
+  const [resolvedZoneRow, resolvedZoneCol] = chooseZoneSpot(course, isStrike, random);
 
   const strikeInfo = isStrike
     ? classifyStrikeType(
@@ -137,8 +138,7 @@ export function buildPitchExecutionContext({
         pitchType,
         controlValue,
         drift,
-        isMistake,
-        random
+        isMistake
       )
     : getEmptyStrikeInfo();
 
@@ -150,8 +150,7 @@ export function buildPitchExecutionContext({
         pitchType,
         controlValue,
         drift,
-        isMistake,
-        random
+        isMistake
       )
     : getEmptyBallInfo();
 
@@ -175,6 +174,11 @@ export function buildPitchExecutionContext({
       ...probs,
       rawOSwingRate: probs.oSwingRate,
       adjustedOSwingRate: effectiveOSwingRate,
+      mistakeRate,
+      isMistake,
+      drift,
+      baseCourse,
+      course,
     },
     isStrike,
     swung,

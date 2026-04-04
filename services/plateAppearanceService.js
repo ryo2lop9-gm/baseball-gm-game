@@ -9,6 +9,25 @@ function formatPct(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatMistakeDebugText(probs) {
+  const parts = [];
+
+  if (typeof probs?.mistakeRate === "number") {
+    parts.push(`mistakeRate=${formatPct(probs.mistakeRate)}`);
+  }
+  if (typeof probs?.drift === "number") {
+    parts.push(`drift=${probs.drift}`);
+  }
+  if (typeof probs?.isMistake === "boolean") {
+    parts.push(`mistake=${probs.isMistake ? "ON" : "OFF"}`);
+  }
+  if (probs?.baseCourse || probs?.course) {
+    parts.push(`course=${probs?.baseCourse || "-"}→${probs?.course || "-"}`);
+  }
+
+  return parts.length ? ` / ${parts.join(" / ")}` : "";
+}
+
 function buildTakeStrikeLogText(batter, state, strikeTypeLabel) {
   const suffix = strikeTypeLabel ? `・${strikeTypeLabel}` : "";
   return `${batter.name}: 見逃しストライク${suffix} (${state.balls}-${state.strikes})`;
@@ -59,29 +78,31 @@ function buildPitchQualityDebugText({
     }
   }
 
-  return parts.length ? ` [${parts.join(" / ")}]` : "";
+  const base = parts.length ? ` [${parts.join(" / ")}]` : "";
+  return `${base}${formatMistakeDebugText(probs)}`;
 }
 
 function calcTakeStrikeChance({
   batter,
-  isStrike,
   strikeJudgeDifficulty,
   borderLikelihood,
 }) {
-  if (!isStrike) {
-    return 1;
-  }
-
   const eye = Number(batter?.ratings?.eye || batter?.eye || 50);
   const eyeScore = clamp((eye - 50) / 50, -1, 1);
 
-  let chance = 1.0;
-  chance -= strikeJudgeDifficulty * 0.18;
-  chance -= borderLikelihood * 0.08;
-  chance -= eyeScore * strikeJudgeDifficulty * 0.10;
-  chance -= eyeScore * borderLikelihood * 0.05;
+  let chance = 0.995;
 
-  return clamp(chance, 0.82, 1.0);
+  chance -= strikeJudgeDifficulty * 0.28;
+  chance -= borderLikelihood * 0.18;
+
+  if (eyeScore > 0) {
+    chance -= eyeScore * 0.08;
+    chance -= eyeScore * borderLikelihood * 0.14;
+  } else {
+    chance += Math.abs(eyeScore) * 0.03;
+  }
+
+  return clamp(chance, 0.55, 0.995);
 }
 
 function calcBallTypeOContactAdjustment(ballType) {
@@ -92,6 +113,7 @@ function calcBallTypeOContactAdjustment(ballType) {
       return 0.90;
     case "edge_high":
     case "edge_low":
+    case "edge_side":
       return 0.97;
     default:
       return 1.0;
@@ -150,13 +172,17 @@ export function resolvePlateAppearanceResult({
     adjustedOSwingRate: probs?.adjustedOSwingRate,
     rawOContactRate: probs?.rawOContactRate,
     adjustedOContactRate: probs?.adjustedOContactRate,
+    mistakeRate: probs?.mistakeRate,
+    isMistake: probs?.isMistake,
+    drift: probs?.drift,
+    baseCourse: probs?.baseCourse,
+    course: probs?.course,
   });
 
   if (!swung) {
     if (isStrike) {
       const calledStrikeChance = calcTakeStrikeChance({
         batter,
-        isStrike,
         strikeJudgeDifficulty,
         borderLikelihood,
       });

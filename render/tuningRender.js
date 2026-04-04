@@ -296,6 +296,79 @@ function formatPct(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getSpotGrade(row, col) {
+  if (!Number.isInteger(row) || !Number.isInteger(col)) return "-";
+
+  const inStrikeZone = row >= 1 && row <= 3 && col >= 1 && col <= 3;
+  if (!inStrikeZone) return "Ball";
+
+  if (row === 2 && col === 2) return "C";
+
+  const isCorner =
+    (row === 1 || row === 3) &&
+    (col === 1 || col === 3);
+
+  if (isCorner) return "A";
+  return "B";
+}
+
+function renderPresentationLog(state, dom) {
+  if (!dom.log) return;
+
+  const lines = Array.isArray(state?.presentation?.logLines)
+    ? state.presentation.logLines
+    : [];
+
+  dom.log.innerHTML = lines
+    .map((line) => `<div class="log-line">${escapeHtml(line)}</div>`)
+    .join("");
+
+  dom.log.scrollTop = dom.log.scrollHeight;
+}
+
+function getLastPitchRow(lastPitch) {
+  const candidates = [
+    lastPitch?.zoneRow,
+    lastPitch?.row,
+    lastPitch?.targetRow,
+    lastPitch?.pitchRow,
+  ];
+
+  for (const value of candidates) {
+    if (Number.isInteger(value) && value >= 0 && value <= 4) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getLastPitchCol(lastPitch) {
+  const candidates = [
+    lastPitch?.zoneCol,
+    lastPitch?.col,
+    lastPitch?.targetCol,
+    lastPitch?.pitchCol,
+  ];
+
+  for (const value of candidates) {
+    if (Number.isInteger(value) && value >= 0 && value <= 4) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function buildBallDebugLine(lastPitch) {
   const parts = [];
   const ballType = lastPitch?.ballTypeLabel || lastPitch?.ballType || null;
@@ -347,12 +420,45 @@ function buildStrikeDebugLine(lastPitch) {
   return parts.length ? ` / ${parts.join(" / ")}` : "";
 }
 
+function buildExecutionDebugLine(lastPitch) {
+  const parts = [];
+
+  const row = getLastPitchRow(lastPitch);
+  const col = getLastPitchCol(lastPitch);
+  const spotGrade = getSpotGrade(row, col);
+
+  if (lastPitch?.baseCourse || lastPitch?.course) {
+    const from = lastPitch?.baseCourse || "-";
+    const to = lastPitch?.course || "-";
+    parts.push(`course ${from}→${to}`);
+  }
+
+  if (typeof lastPitch?.mistakeRate === "number") {
+    parts.push(`mistakeRate ${formatPct(lastPitch.mistakeRate)}`);
+  }
+
+  if (typeof lastPitch?.drift === "number") {
+    parts.push(`drift ${lastPitch.drift}`);
+  }
+
+  if (typeof lastPitch?.isMistake === "boolean") {
+    parts.push(`mistake ${lastPitch.isMistake ? "ON" : "OFF"}`);
+  }
+
+  if (row !== null && col !== null) {
+    parts.push(`spot (${row},${col})`);
+    parts.push(`spotGrade ${spotGrade}`);
+  }
+
+  return parts.length ? ` / ${parts.join(" / ")}` : "";
+}
+
 function renderZone(state, dom) {
   if (!dom.zoneGrid) return;
 
   const lastPitch = state.presentation?.lastPitch || {};
-  const hitRow = Number.isInteger(lastPitch.zoneRow) ? lastPitch.zoneRow : null;
-  const hitCol = Number.isInteger(lastPitch.zoneCol) ? lastPitch.zoneCol : null;
+  const hitRow = getLastPitchRow(lastPitch);
+  const hitCol = getLastPitchCol(lastPitch);
 
   const cells = [];
 
@@ -378,8 +484,10 @@ function renderZone(state, dom) {
 
     const ballLine = !lastPitch?.isStrike ? buildBallDebugLine(lastPitch) : "";
     const strikeLine = lastPitch?.isStrike ? buildStrikeDebugLine(lastPitch) : "";
+    const executionLine = buildExecutionDebugLine(lastPitch);
 
-    dom.zoneText.textContent = `${pitchType} / ${course} / ${resultText}${ballLine}${strikeLine}`;
+    dom.zoneText.textContent =
+      `${pitchType} / ${course} / ${resultText}${ballLine}${strikeLine}${executionLine}`;
   }
 }
 
@@ -404,6 +512,7 @@ export function renderGameCore(state, dom) {
 
   renderCountLights(state, dom);
   renderHeaderBases(state, dom);
+  renderPresentationLog(state, dom);
 }
 
 export function renderPitchPresentation(state, dom) {
