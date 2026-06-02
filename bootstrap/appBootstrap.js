@@ -128,6 +128,8 @@ export function bootstrapApp() {
       saveRootState();
     },
     createDefaultRosterBundle: () => tuningBootstrap.createDefaultRosterBundle(),
+    createMlbValidationRosterBundle: () =>
+      tuningBootstrap.createMlbValidationRosterBundle(),
     createFreshTuningGame: () =>
       tuningBootstrap.createFreshTuningGame(
         rootStateStore.getTuningRosterBundle()
