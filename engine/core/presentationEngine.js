@@ -1,6 +1,7 @@
 function createEmptyLastPitch() {
   return {
     pitchType: "",
+    pitchVelocity: null,
     baseCourse: "",
     course: "",
     isStrike: null,
