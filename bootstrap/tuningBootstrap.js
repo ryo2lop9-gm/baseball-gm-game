@@ -1,20 +1,29 @@
-import { createDefaultTeams } from "../models/teamModels.js";
+import {
+  createDefaultTeams,
+  createMlbAverageValidationTeams,
+} from "../models/teamModels.js";
 import { createInitialGameState } from "../state/gameState.js";
 import {
   createRosterState,
   buildTeamFromRoster,
 } from "../engine/gm/rosterEngine.js";
 
+function createRosterBundleFromTeams(teams) {
+  return {
+    awayMeta: { name: teams.away.name },
+    homeMeta: { name: teams.home.name },
+    awayRoster: createRosterState(teams.away),
+    homeRoster: createRosterState(teams.home),
+  };
+}
+
 export function createTuningBootstrap() {
   function createDefaultRosterBundle() {
-    const teams = createDefaultTeams();
+    return createRosterBundleFromTeams(createDefaultTeams());
+  }
 
-    return {
-      awayMeta: { name: teams.away.name },
-      homeMeta: { name: teams.home.name },
-      awayRoster: createRosterState(teams.away),
-      homeRoster: createRosterState(teams.home),
-    };
+  function createMlbValidationRosterBundle() {
+    return createRosterBundleFromTeams(createMlbAverageValidationTeams());
   }
 
   function buildCurrentTuningTeams(rosterBundle) {
@@ -31,6 +40,7 @@ export function createTuningBootstrap() {
 
   return {
     createDefaultRosterBundle,
+    createMlbValidationRosterBundle,
     buildCurrentTuningTeams,
     createFreshTuningGame,
   };
