@@ -41,6 +41,12 @@ function getDisplayedPlayerStats(player) {
   return player?.gameStats || player?.seasonStats || emptyDisplayedStats();
 }
 
+function getSeasonPlayers(season, side) {
+  if (!season) return [];
+  if (side === "away") return season.awayPlayers || season.away?.players || [];
+  return season.homePlayers || season.home?.players || [];
+}
+
 function qocPctFromMap(qoc) {
   const total = Object.values(qoc || {}).reduce((sum, value) => sum + value, 0);
   const out = {};
@@ -633,13 +639,13 @@ export function renderTuningSeasonTables(season, dom) {
 
   if (dom.tuningSeasonAwayPlayerStatsTable) {
     dom.tuningSeasonAwayPlayerStatsTable.innerHTML = season
-      ? buildSeasonPlayerStatsTable(season.away.players)
+      ? buildSeasonPlayerStatsTable(getSeasonPlayers(season, "away"))
       : `<div>まだシーズン結果がありません。</div>`;
   }
 
   if (dom.tuningSeasonHomePlayerStatsTable) {
     dom.tuningSeasonHomePlayerStatsTable.innerHTML = season
-      ? buildSeasonPlayerStatsTable(season.home.players)
+      ? buildSeasonPlayerStatsTable(getSeasonPlayers(season, "home"))
       : `<div>まだシーズン結果がありません。</div>`;
   }
 }
