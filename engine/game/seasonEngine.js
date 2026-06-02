@@ -30,21 +30,21 @@ function createEmptySeasonStatLine() {
   };
 }
 
-function addQoC(target, source) {
+function addQoC(target, source = {}) {
   for (const key of Object.keys(target)) {
     target[key] += source[key] || 0;
   }
 }
 
 function totalQoC(qoc) {
-  return Object.values(qoc).reduce((sum, value) => sum + value, 0);
+  return Object.values(qoc || {}).reduce((sum, value) => sum + value, 0);
 }
 
 function qocPercentMap(qoc) {
   const total = totalQoC(qoc);
   const out = {};
 
-  for (const key of Object.keys(qoc)) {
+  for (const key of Object.keys(qoc || {})) {
     out[key] = total > 0 ? ((qoc[key] / total) * 100).toFixed(1) : "0.0";
   }
 
@@ -65,28 +65,63 @@ function createSeasonTeamSummary() {
   };
 }
 
-function addTeamBox(target, source) {
-  target.runs += source.runs;
-  target.hits += source.hits;
-  target.doubles += source.doubles;
-  target.triples += source.triples;
-  target.hr += source.hr;
-  target.walks += source.walks;
-  target.strikeouts += source.strikeouts;
-  target.outsInPlay += source.outsInPlay;
+function addTeamBox(target, source = {}) {
+  target.runs += source.runs || 0;
+  target.hits += source.hits || 0;
+  target.doubles += source.doubles || 0;
+  target.triples += source.triples || 0;
+  target.hr += source.hr || 0;
+  target.walks += source.walks || 0;
+  target.strikeouts += source.strikeouts || 0;
+  target.outsInPlay += source.outsInPlay || 0;
   addQoC(target.qoc, source.qoc);
 }
 
-function calcRateSummary(team, games) {
-  const pa = Math.max(1, games * 38);
-  const ab = Math.max(1, pa - team.walks);
-  const singles = Math.max(0, team.hits - team.doubles - team.triples - team.hr);
-  const totalBases = singles + team.doubles * 2 + team.triples * 3 + team.hr * 4;
-  const avg = (team.hits / ab).toFixed(3);
-  const obp = ((team.hits + team.walks) / pa).toFixed(3);
-  const slg = (totalBases / ab).toFixed(3);
+function sumPlayerStats(players) {
+  return (players || []).reduce(
+    (total, player) => {
+      const s = player?.seasonStats || {};
+      total.PA += s.PA || 0;
+      total.AB += s.AB || 0;
+      total.H += s.H || 0;
+      total.doubles += s.doubles || 0;
+      total.triples += s.triples || 0;
+      total.HR += s.HR || 0;
+      total.BB += s.BB || 0;
+      total.K += s.K || 0;
+      total.RBI += s.RBI || 0;
+      total.R += s.R || 0;
+      return total;
+    },
+    createEmptySeasonStatLine()
+  );
+}
+
+function formatRate(numerator, denominator) {
+  if (!denominator || denominator <= 0) return ".000";
+  return (numerator / denominator).toFixed(3);
+}
+
+function calcRateSummaryFromPlayers(players) {
+  const total = sumPlayerStats(players);
+  const singles = Math.max(0, total.H - total.doubles - total.triples - total.HR);
+  const totalBases = singles + total.doubles * 2 + total.triples * 3 + total.HR * 4;
+  const avg = formatRate(total.H, total.AB);
+  const obp = formatRate(total.H + total.BB, total.PA);
+  const slg = formatRate(totalBases, total.AB);
   const ops = (Number(obp) + Number(slg)).toFixed(3);
-  return { avg, obp, slg, ops };
+
+  return {
+    avg,
+    obp,
+    slg,
+    ops,
+    PA: total.PA,
+    AB: total.AB,
+    H: total.H,
+    BB: total.BB,
+    totalBases,
+  };
 }
 
 function cloneSeasonPlayerTemplate(lineup) {
@@ -117,6 +152,16 @@ function addPlayerSeasonStats(targetPlayers, sourcePlayers) {
   }
 }
 
+function syncTeamSummaryFromPlayerTotals(teamSummary, players) {
+  const total = sumPlayerStats(players);
+  teamSummary.hits = total.H;
+  teamSummary.doubles = total.doubles;
+  teamSummary.triples = total.triples;
+  teamSummary.hr = total.HR;
+  teamSummary.walks = total.BB;
+  teamSummary.strikeouts = total.K;
+}
+
 /**
  * fast sim 用:
  * 1球ごと・1打席ごとには clone しない。
@@ -130,8 +175,9 @@ function createSimGameStateFromTeams(awayTeam, homeTeam) {
 }
 
 export function simulateSeason(awayTeam, homeTeam, gameCount) {
+  const safeGameCount = Math.max(0, Number(gameCount || 0));
   const season = {
-    games: gameCount,
+    games: safeGameCount,
     awayName: awayTeam.name,
     homeName: homeTeam.name,
     awayWins: 0,
@@ -144,7 +190,7 @@ export function simulateSeason(awayTeam, homeTeam, gameCount) {
 
   const fastOptions = createFastSimulationOptions();
 
-  for (let i = 0; i < gameCount; i += 1) {
+  for (let i = 0; i < safeGameCount; i += 1) {
     const simState = createSimGameStateFromTeams(awayTeam, homeTeam);
     const result = simulateGameMutable(simState, fastOptions);
 
@@ -161,14 +207,17 @@ export function simulateSeason(awayTeam, homeTeam, gameCount) {
     }
   }
 
-  season.awayRPG = (season.away.runs / gameCount).toFixed(2);
-  season.homeRPG = (season.home.runs / gameCount).toFixed(2);
+  syncTeamSummaryFromPlayerTotals(season.away, season.awayPlayers);
+  syncTeamSummaryFromPlayerTotals(season.home, season.homePlayers);
+
+  season.awayRPG = safeGameCount > 0 ? (season.away.runs / safeGameCount).toFixed(2) : "0.00";
+  season.homeRPG = safeGameCount > 0 ? (season.home.runs / safeGameCount).toFixed(2) : "0.00";
 
   season.awayQoCPct = qocPercentMap(season.away.qoc);
   season.homeQoCPct = qocPercentMap(season.home.qoc);
 
-  season.awayRates = calcRateSummary(season.away, gameCount);
-  season.homeRates = calcRateSummary(season.home, gameCount);
+  season.awayRates = calcRateSummaryFromPlayers(season.awayPlayers);
+  season.homeRates = calcRateSummaryFromPlayers(season.homePlayers);
 
   return season;
 }
