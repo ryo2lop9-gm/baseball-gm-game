@@ -1,3 +1,5 @@
+import { createVelocityBandStatsRows } from "../services/velocityBandStatsService.js";
+
 function formatInningText(state) {
   const inning =
     state.isComplete && state.finalInning ? state.finalInning : state.inning;
@@ -140,6 +142,52 @@ function buildQoCTable(title, qoc, pct) {
                 <td>${key}</td>
                 <td>${qoc?.[key] || 0}</td>
                 <td>${pct?.[key] || "0.0"}%</td>
+              </tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function buildVelocityBandStatsTable(title, stats) {
+  const rows = createVelocityBandStatsRows(stats);
+
+  return `
+    <h3>${title}</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>球速帯</th>
+          <th>PA</th>
+          <th>AB</th>
+          <th>H</th>
+          <th>HR</th>
+          <th>BB</th>
+          <th>K</th>
+          <th>AVG</th>
+          <th>OBP</th>
+          <th>SLG</th>
+          <th>OPS</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (row) => `
+              <tr>
+                <td>${row.label}</td>
+                <td>${row.PA}</td>
+                <td>${row.AB}</td>
+                <td>${row.H}</td>
+                <td>${row.HR}</td>
+                <td>${row.BB}</td>
+                <td>${row.K}</td>
+                <td>${row.AVG}</td>
+                <td>${row.OBP}</td>
+                <td>${row.SLG}</td>
+                <td>${row.OPS}</td>
               </tr>
             `
           )
@@ -592,6 +640,20 @@ export function renderTuningGameTables(state, dom) {
       `${state.homeTeam.name} QoC`,
       state.box.home.qoc,
       qocPctFromMap(state.box.home.qoc)
+    );
+  }
+
+  if (dom.tuningAwayVelocityBandTable) {
+    dom.tuningAwayVelocityBandTable.innerHTML = buildVelocityBandStatsTable(
+      `${state.awayTeam.name} 球速帯別成績`,
+      state.box.away.velocityBandStats
+    );
+  }
+
+  if (dom.tuningHomeVelocityBandTable) {
+    dom.tuningHomeVelocityBandTable.innerHTML = buildVelocityBandStatsTable(
+      `${state.homeTeam.name} 球速帯別成績`,
+      state.box.home.velocityBandStats
     );
   }
 
