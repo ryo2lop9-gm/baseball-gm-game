@@ -7,6 +7,15 @@ import { createGameBatter, createGamePitcher } from "./playerModels.js";
  * - 最小リーグ用の複数球団セットを返せるようにする
  */
 
+function createPitchMix({ fourSeam, slider, curve, fork }) {
+  return {
+    fourSeam: { usage: fourSeam.usage, velocity: fourSeam.velocity },
+    slider: { usage: slider.usage, velocity: slider.velocity },
+    curve: { usage: curve.usage, velocity: curve.velocity },
+    fork: { usage: fork.usage, velocity: fork.velocity },
+  };
+}
+
 function createBullpenPitchers(configs) {
   return configs.map((cfg) =>
     createGamePitcher(cfg.name, cfg.control, cfg.stuff, cfg.pitchMix)
@@ -198,6 +207,114 @@ function createFukuokaBlaze() {
       createGameBatter("Nakano", 53, 46, 53),
       createGameBatter("Morita", 49, 43, 50),
     ],
+  };
+}
+
+function createMlbAverageLineup(prefix) {
+  return [
+    createGameBatter(`${prefix} Contact 1`, 57, 47, 58),
+    createGameBatter(`${prefix} Table 2`, 59, 49, 60),
+    createGameBatter(`${prefix} Balanced 3`, 60, 60, 56),
+    createGameBatter(`${prefix} Power 4`, 56, 72, 50),
+    createGameBatter(`${prefix} Power 5`, 55, 67, 51),
+    createGameBatter(`${prefix} Average 6`, 54, 56, 53),
+    createGameBatter(`${prefix} Low Contact 7`, 50, 58, 48),
+    createGameBatter(`${prefix} Defense 8`, 51, 46, 52),
+    createGameBatter(`${prefix} Utility 9`, 52, 43, 54),
+  ];
+}
+
+function createMlbValidationPitcher(name, profile) {
+  return createGamePitcher(
+    name,
+    profile.control,
+    profile.stuff,
+    createPitchMix(profile.pitchMix)
+  );
+}
+
+export function createMlbAverageValidationTeams() {
+  const averageStarter = createMlbValidationPitcher("MLB Avg Starter", {
+    control: 61,
+    stuff: 61,
+    pitchMix: {
+      fourSeam: { usage: 0.42, velocity: 94.5 },
+      slider: { usage: 0.27, velocity: 85.7 },
+      curve: { usage: 0.10, velocity: 79.2 },
+      fork: { usage: 0.21, velocity: 86.4 },
+    },
+  });
+
+  const powerStarter = createMlbValidationPitcher("MLB Power Starter", {
+    control: 56,
+    stuff: 70,
+    pitchMix: {
+      fourSeam: { usage: 0.50, velocity: 97.2 },
+      slider: { usage: 0.31, velocity: 88.1 },
+      curve: { usage: 0.06, velocity: 81.0 },
+      fork: { usage: 0.13, velocity: 89.0 },
+    },
+  });
+
+  return {
+    away: {
+      name: "MLB Avg Lineup",
+      startingPitcher: averageStarter,
+      bullpen: createBullpenPitchers([
+        {
+          name: "MLB Avg RP 1",
+          control: 60,
+          stuff: 63,
+          pitchMix: createPitchMix({
+            fourSeam: { usage: 0.48, velocity: 95.4 },
+            slider: { usage: 0.30, velocity: 86.5 },
+            curve: { usage: 0.07, velocity: 79.8 },
+            fork: { usage: 0.15, velocity: 87.1 },
+          }),
+        },
+        {
+          name: "MLB Avg RP 2",
+          control: 57,
+          stuff: 66,
+          pitchMix: createPitchMix({
+            fourSeam: { usage: 0.52, velocity: 96.1 },
+            slider: { usage: 0.26, velocity: 87.0 },
+            curve: { usage: 0.08, velocity: 80.2 },
+            fork: { usage: 0.14, velocity: 88.0 },
+          }),
+        },
+      ]),
+      lineup: createMlbAverageLineup("Avg"),
+    },
+    home: {
+      name: "MLB Power Pitch Test",
+      startingPitcher: powerStarter,
+      bullpen: createBullpenPitchers([
+        {
+          name: "MLB Power RP 1",
+          control: 55,
+          stuff: 70,
+          pitchMix: createPitchMix({
+            fourSeam: { usage: 0.55, velocity: 97.5 },
+            slider: { usage: 0.28, velocity: 88.4 },
+            curve: { usage: 0.05, velocity: 81.5 },
+            fork: { usage: 0.12, velocity: 89.2 },
+          }),
+        },
+        {
+          name: "MLB Control RP",
+          control: 66,
+          stuff: 59,
+          pitchMix: createPitchMix({
+            fourSeam: { usage: 0.40, velocity: 93.8 },
+            slider: { usage: 0.24, velocity: 84.9 },
+            curve: { usage: 0.16, velocity: 78.2 },
+            fork: { usage: 0.20, velocity: 85.6 },
+          }),
+        },
+      ]),
+      lineup: createMlbAverageLineup("PowerTest"),
+    },
   };
 }
 
