@@ -7,6 +7,52 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+const DEFAULT_PITCH_VELOCITIES = {
+  fourSeam: 94.5,
+  slider: 85.5,
+  curve: 79.0,
+  fork: 86.2,
+};
+
+function getPitchMixValue(pitcher, pitchType) {
+  const value = pitcher?.pitchMix?.[pitchType];
+  if (typeof value === "number") {
+    return {
+      usage: value,
+      velocity: DEFAULT_PITCH_VELOCITIES[pitchType],
+    };
+  }
+  if (value && typeof value === "object") {
+    return {
+      usage: safeNum(value.usage, 0),
+      velocity: safeNum(value.velocity, DEFAULT_PITCH_VELOCITIES[pitchType]),
+    };
+  }
+  return {
+    usage: 0,
+    velocity: DEFAULT_PITCH_VELOCITIES[pitchType],
+  };
+}
+
+function ensureEditablePitchMix(pitcher) {
+  const current = pitcher.pitchMix || {};
+  pitcher.pitchMix = {};
+
+  for (const pitchType of ["fourSeam", "slider", "curve", "fork"]) {
+    const normalized = getPitchMixValue({ pitchMix: current }, pitchType);
+    pitcher.pitchMix[pitchType] = {
+      usage: normalized.usage,
+      velocity: normalized.velocity,
+    };
+  }
+
+  return pitcher.pitchMix;
+}
+
+function readVelocityInput(input, fallback) {
+  return clamp(safeNum(input?.value, fallback), 50, 110);
+}
+
 export function fillEditorSlotOptions(dom) {
   if (!dom.editorSlotSelect || !dom.editorPlayerTypeSelect) return;
 
@@ -44,6 +90,7 @@ export function getSelectedEditableEntity(dom, rosterBundle) {
 export function loadEditorFormFromEntity(dom, entity) {
   const ratings = entity?.ratings || {};
   const type = dom.editorPlayerTypeSelect?.value || "batter";
+  const isPitcher = type === "pitcher";
 
   if (dom.editorNameInput) dom.editorNameInput.value = entity?.name || "";
 
@@ -51,8 +98,18 @@ export function loadEditorFormFromEntity(dom, entity) {
   if (dom.editorPowerInput) dom.editorPowerInput.value = type === "batter" ? safeNum(ratings.power) : "";
   if (dom.editorEyeInput) dom.editorEyeInput.value = type === "batter" ? safeNum(ratings.eye) : "";
 
-  if (dom.editorControlInput) dom.editorControlInput.value = type === "pitcher" ? safeNum(ratings.control) : "";
-  if (dom.editorStuffInput) dom.editorStuffInput.value = type === "pitcher" ? safeNum(ratings.stuff) : "";
+  if (dom.editorControlInput) dom.editorControlInput.value = isPitcher ? safeNum(ratings.control) : "";
+  if (dom.editorStuffInput) dom.editorStuffInput.value = isPitcher ? safeNum(ratings.stuff) : "";
+
+  const fourSeam = getPitchMixValue(entity, "fourSeam");
+  const slider = getPitchMixValue(entity, "slider");
+  const curve = getPitchMixValue(entity, "curve");
+  const fork = getPitchMixValue(entity, "fork");
+
+  if (dom.editorFourSeamVeloInput) dom.editorFourSeamVeloInput.value = isPitcher ? fourSeam.velocity : "";
+  if (dom.editorSliderVeloInput) dom.editorSliderVeloInput.value = isPitcher ? slider.velocity : "";
+  if (dom.editorCurveVeloInput) dom.editorCurveVeloInput.value = isPitcher ? curve.velocity : "";
+  if (dom.editorForkVeloInput) dom.editorForkVeloInput.value = isPitcher ? fork.velocity : "";
 }
 
 export function applyEditorFormToRoster(dom, rosterBundle) {
@@ -65,18 +122,38 @@ export function applyEditorFormToRoster(dom, rosterBundle) {
   if (type === "pitcher") {
     if (!roster.rotation || !roster.rotation[0]) return nextBundle;
 
-    roster.rotation[0].name =
-      (dom.editorNameInput?.value || "").trim() || roster.rotation[0].name;
+    const pitcher = roster.rotation[0];
 
-    roster.rotation[0].ratings.control = clamp(
-      safeNum(dom.editorControlInput?.value, roster.rotation[0].ratings.control),
+    pitcher.name =
+      (dom.editorNameInput?.value || "").trim() || pitcher.name;
+
+    pitcher.ratings.control = clamp(
+      safeNum(dom.editorControlInput?.value, pitcher.ratings.control),
       1,
       100
     );
-    roster.rotation[0].ratings.stuff = clamp(
-      safeNum(dom.editorStuffInput?.value, roster.rotation[0].ratings.stuff),
+    pitcher.ratings.stuff = clamp(
+      safeNum(dom.editorStuffInput?.value, pitcher.ratings.stuff),
       1,
       100
+    );
+
+    const pitchMix = ensureEditablePitchMix(pitcher);
+    pitchMix.fourSeam.velocity = readVelocityInput(
+      dom.editorFourSeamVeloInput,
+      pitchMix.fourSeam.velocity
+    );
+    pitchMix.slider.velocity = readVelocityInput(
+      dom.editorSliderVeloInput,
+      pitchMix.slider.velocity
+    );
+    pitchMix.curve.velocity = readVelocityInput(
+      dom.editorCurveVeloInput,
+      pitchMix.curve.velocity
+    );
+    pitchMix.fork.velocity = readVelocityInput(
+      dom.editorForkVeloInput,
+      pitchMix.fork.velocity
     );
 
     return nextBundle;
