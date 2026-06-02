@@ -1,4 +1,5 @@
 import { chooseQoC } from "./qocService.js";
+import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -120,6 +121,17 @@ function calcBallTypeOContactAdjustment(ballType) {
   }
 }
 
+function recordVelocityResult(state, side, pitchVelocity, result) {
+  const teamBox = state?.box?.[side];
+  if (!teamBox) return;
+
+  teamBox.velocityBandStats = recordVelocityBandPlateAppearance(
+    teamBox.velocityBandStats,
+    pitchVelocity,
+    result
+  );
+}
+
 export function resolvePlateAppearanceResult({
   state,
   batter,
@@ -154,6 +166,8 @@ export function resolvePlateAppearanceResult({
   finishPlateAppearanceState,
   resolveQoCResult,
 }) {
+  const pitchVelocity = probs?.pitchVelocity;
+
   emitLastPitchPatch(options, {
     strikeType,
     strikeTypeLabel,
@@ -216,6 +230,11 @@ export function resolvePlateAppearanceResult({
           addStrikeoutStat(batter);
           batter.gameStats.AB += 1;
           state.outs += 1;
+          recordVelocityResult(state, side, pitchVelocity, {
+            PA: 1,
+            AB: 1,
+            K: 1,
+          });
 
           emitLastPitchPatch(options, {
             resultText: "見逃し三振",
@@ -256,6 +275,10 @@ export function resolvePlateAppearanceResult({
         state.box[side].walks += 1;
         const runs = applyWalkAdvance(state, batter);
         addWalkStat(batter, runs);
+        recordVelocityResult(state, side, pitchVelocity, {
+          PA: 1,
+          BB: 1,
+        });
 
         emitLastPitchPatch(options, {
           resultText: "四球",
@@ -290,6 +313,10 @@ export function resolvePlateAppearanceResult({
       state.box[side].walks += 1;
       const runs = applyWalkAdvance(state, batter);
       addWalkStat(batter, runs);
+      recordVelocityResult(state, side, pitchVelocity, {
+        PA: 1,
+        BB: 1,
+      });
 
       emitLastPitchPatch(options, {
         resultText: "四球",
@@ -349,6 +376,11 @@ export function resolvePlateAppearanceResult({
       addStrikeoutStat(batter);
       batter.gameStats.AB += 1;
       state.outs += 1;
+      recordVelocityResult(state, side, pitchVelocity, {
+        PA: 1,
+        AB: 1,
+        K: 1,
+      });
 
       emitLastPitchPatch(options, {
         resultText: "空振り三振",
