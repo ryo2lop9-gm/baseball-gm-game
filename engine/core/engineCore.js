@@ -106,6 +106,7 @@ export function stepPitchMutable(state, rawOptions = {}) {
 
   const {
     pitchType,
+    pitchVelocity,
     baseCourse,
     course,
     probs,
@@ -145,6 +146,7 @@ export function stepPitchMutable(state, rawOptions = {}) {
 
   emitLastPitchPatch(options, {
     pitchType,
+    pitchVelocity,
     baseCourse,
     course,
     isStrike,
