@@ -17,6 +17,7 @@ export function createTuningPageController({
   getTuningRosterBundle,
   setTuningRosterBundle,
   createDefaultRosterBundle,
+  createMlbValidationRosterBundle,
   createFreshTuningGame,
 }) {
   const dom = getTuningDom();
@@ -27,6 +28,7 @@ export function createTuningPageController({
     getTuningRosterBundle,
     setTuningRosterBundle,
     createDefaultRosterBundle,
+    createMlbValidationRosterBundle,
     createFreshTuningGame,
   });
 
@@ -135,6 +137,13 @@ export function createTuningPageController({
     syncTuningPage();
   }
 
+  function applyMlbValidationPreset() {
+    facade.applyMlbValidationPreset();
+    resetLogCursor();
+    renderFullLog();
+    syncTuningPage();
+  }
+
   function applyEditorChanges() {
     facade.applyEditorChanges(dom);
     resetLogCursor();
@@ -157,6 +166,7 @@ export function createTuningPageController({
     dom.sim162Btn?.addEventListener("click", () => runSeasonSimulation(162));
 
     dom.resetTuningRosterBtn?.addEventListener("click", resetSandboxRoster);
+    dom.applyMlbValidationPresetBtn?.addEventListener("click", applyMlbValidationPreset);
 
     dom.editorSideSelect?.addEventListener("change", refreshEditorForm);
     dom.editorPlayerTypeSelect?.addEventListener("change", refreshEditorForm);
