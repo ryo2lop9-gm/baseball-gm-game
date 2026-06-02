@@ -38,6 +38,7 @@ export function getTuningDom() {
     sim10Btn: document.getElementById("sim10Btn"),
     sim162Btn: document.getElementById("sim162Btn"),
     resetTuningRosterBtn: document.getElementById("resetTuningRosterBtn"),
+    applyMlbValidationPresetBtn: document.getElementById("applyMlbValidationPresetBtn"),
 
     tuningCurrentScore: document.getElementById("tuningCurrentScore"),
     tuningCurrentState: document.getElementById("tuningCurrentState"),
