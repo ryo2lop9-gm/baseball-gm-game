@@ -296,6 +296,12 @@ function formatPct(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatPitchVelocity(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "";
+  return ` ${num.toFixed(1)}mph`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -479,6 +485,7 @@ function renderZone(state, dom) {
 
   if (dom.zoneText) {
     const pitchType = lastPitch.pitchType || "-";
+    const pitchVelocity = formatPitchVelocity(lastPitch.pitchVelocity);
     const course = lastPitch.course || "-";
     const resultText = lastPitch.resultText || "-";
 
@@ -487,7 +494,7 @@ function renderZone(state, dom) {
     const executionLine = buildExecutionDebugLine(lastPitch);
 
     dom.zoneText.textContent =
-      `${pitchType} / ${course} / ${resultText}${ballLine}${strikeLine}${executionLine}`;
+      `${pitchType}${pitchVelocity} / ${course} / ${resultText}${ballLine}${strikeLine}${executionLine}`;
   }
 }
 
@@ -625,14 +632,14 @@ export function renderTuningSeasonTables(season, dom) {
   }
 
   if (dom.tuningSeasonAwayPlayerStatsTable) {
-    dom.tuningSeasonAwayPlayerStatsTable.innerHTML = buildSeasonPlayerStatsTable(
-      season?.awayPlayers || []
-    );
+    dom.tuningSeasonAwayPlayerStatsTable.innerHTML = season
+      ? buildSeasonPlayerStatsTable(season.away.players)
+      : `<div>まだシーズン結果がありません。</div>`;
   }
 
   if (dom.tuningSeasonHomePlayerStatsTable) {
-    dom.tuningSeasonHomePlayerStatsTable.innerHTML = buildSeasonPlayerStatsTable(
-      season?.homePlayers || []
-    );
+    dom.tuningSeasonHomePlayerStatsTable.innerHTML = season
+      ? buildSeasonPlayerStatsTable(season.home.players)
+      : `<div>まだシーズン結果がありません。</div>`;
   }
 }
