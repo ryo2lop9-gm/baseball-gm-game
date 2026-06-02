@@ -1,11 +1,24 @@
 import { getHitTypeProbabilities } from "../config/hitOutcomeConfig.js";
 import { getPitchTypeLabel } from "../config/pitchConfig.js";
+import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
+
+function recordVelocityResult(state, side, pitchVelocity, result) {
+  const teamBox = state?.box?.[side];
+  if (!teamBox) return;
+
+  teamBox.velocityBandStats = recordVelocityBandPlateAppearance(
+    teamBox.velocityBandStats,
+    pitchVelocity,
+    result
+  );
+}
 
 export function resolveContactResult({
   state,
   batter,
   side,
   pitchType,
+  pitchVelocity,
   qoc,
   options,
   random,
@@ -33,6 +46,11 @@ export function resolveContactResult({
     state.outs += 1;
     state.box[side].outsInPlay += 1;
     addOutInPlayStat(batter);
+    recordVelocityResult(state, side, pitchVelocity, {
+      PA: 1,
+      AB: 1,
+      H: 0,
+    });
     emitLastPitchPatch(options, { resultText: `${qoc} / 凡打` });
     emitLog(
       options,
@@ -47,6 +65,12 @@ export function resolveContactResult({
     state.box[side].hits += 1;
     const runs = advanceRunnersOnHit(state, batter, 1);
     addHitStat(batter, "1B", runs);
+    recordVelocityResult(state, side, pitchVelocity, {
+      PA: 1,
+      AB: 1,
+      H: 1,
+      totalBases: 1,
+    });
     emitLastPitchPatch(options, { resultText: `${qoc} / 安打` });
     emitLog(
       options,
@@ -67,6 +91,13 @@ export function resolveContactResult({
     state.box[side].doubles += 1;
     const runs = advanceRunnersOnHit(state, batter, 2);
     addHitStat(batter, "2B", runs);
+    recordVelocityResult(state, side, pitchVelocity, {
+      PA: 1,
+      AB: 1,
+      H: 1,
+      doubles: 1,
+      totalBases: 2,
+    });
     emitLastPitchPatch(options, { resultText: `${qoc} / 二塁打` });
     emitLog(
       options,
@@ -87,6 +118,13 @@ export function resolveContactResult({
     state.box[side].triples += 1;
     const runs = advanceRunnersOnHit(state, batter, 3);
     addHitStat(batter, "3B", runs);
+    recordVelocityResult(state, side, pitchVelocity, {
+      PA: 1,
+      AB: 1,
+      H: 1,
+      triples: 1,
+      totalBases: 3,
+    });
     emitLastPitchPatch(options, { resultText: `${qoc} / 三塁打` });
     emitLog(
       options,
@@ -106,6 +144,13 @@ export function resolveContactResult({
   state.box[side].hr += 1;
   const runs = advanceRunnersOnHit(state, batter, 4);
   addHitStat(batter, "HR", runs);
+  recordVelocityResult(state, side, pitchVelocity, {
+    PA: 1,
+    AB: 1,
+    H: 1,
+    HR: 1,
+    totalBases: 4,
+  });
   emitLastPitchPatch(options, { resultText: `${qoc} / 本塁打` });
   emitLog(
     options,
