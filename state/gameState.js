@@ -1,3 +1,5 @@
+import { createEmptyVelocityBandStats } from "../services/velocityBandStatsService.js";
+
 function emptyQoC() {
   return {
     Weak: 0,
@@ -20,6 +22,7 @@ function emptyTeamBattingBox() {
     strikeouts: 0,
     outsInPlay: 0,
     qoc: emptyQoC(),
+    velocityBandStats: createEmptyVelocityBandStats(),
   };
 }
 
@@ -109,6 +112,7 @@ export function createInitialGameState(awayTeam, homeTeam) {
       log: ["試合準備完了"],
       lastPitch: {
         pitchType: "",
+        pitchVelocity: null,
         course: "",
         isStrike: false,
         swung: false,
