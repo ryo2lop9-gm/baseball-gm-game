@@ -18,6 +18,7 @@ export function createTuningFacade({
   getTuningRosterBundle,
   setTuningRosterBundle,
   createDefaultRosterBundle,
+  createMlbValidationRosterBundle,
   createFreshTuningGame,
 }) {
   function getTuningState() {
@@ -142,6 +143,21 @@ export function createTuningFacade({
     return nextGame;
   }
 
+  function applyMlbValidationPreset() {
+    if (typeof createMlbValidationRosterBundle !== "function") {
+      return resetSandboxRoster();
+    }
+
+    const nextBundle = createMlbValidationRosterBundle();
+    setTuningRosterBundle(nextBundle);
+    setAppTuningSeasonSummary(null);
+
+    const nextGame = createFreshTuningGame(nextBundle);
+    setAppTuningState(nextGame);
+
+    return nextGame;
+  }
+
   function refreshEditorForm(dom) {
     fillEditorSlotOptions(dom);
     const entity = getSelectedEditableEntity(dom, getTuningRosterBundle());
@@ -174,6 +190,7 @@ export function createTuningFacade({
     playFullGame,
     runSeasonSimulation,
     resetSandboxRoster,
+    applyMlbValidationPreset,
     refreshEditorForm,
     applyEditorChanges,
   };
