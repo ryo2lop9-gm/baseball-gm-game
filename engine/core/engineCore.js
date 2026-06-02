@@ -54,12 +54,14 @@ function emitLastPitchPatch(options, patch) {
 
 function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
   const side = currentSide(state);
+  const pitchVelocity = options?.pitchVelocity ?? null;
 
   resolveContactResult({
     state,
     batter,
     side,
     pitchType,
+    pitchVelocity,
     qoc,
     options,
     random,
@@ -143,6 +145,8 @@ export function stepPitchMutable(state, rawOptions = {}) {
     chooseZoneSpot,
     shouldPatchLastPitch: typeof options.onLastPitchPatch === "function",
   });
+
+  options.pitchVelocity = pitchVelocity;
 
   emitLastPitchPatch(options, {
     pitchType,
