@@ -10,19 +10,55 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+const DEFAULT_PITCH_VELOCITIES = {
+  fourSeam: 94.5,
+  slider: 85.5,
+  curve: 79.0,
+  fork: 86.2,
+};
+
+function getPitchMixEntry(pitcher, pitchType) {
+  const entry = pitcher?.pitchMix?.[pitchType];
+  if (typeof entry === "number") {
+    return {
+      usage: entry,
+      velocity: DEFAULT_PITCH_VELOCITIES[pitchType],
+    };
+  }
+  if (entry && typeof entry === "object") {
+    return {
+      usage: Number.isFinite(Number(entry.usage)) ? Number(entry.usage) : 0,
+      velocity: Number.isFinite(Number(entry.velocity))
+        ? Number(entry.velocity)
+        : DEFAULT_PITCH_VELOCITIES[pitchType],
+    };
+  }
+  return {
+    usage: 0,
+    velocity: DEFAULT_PITCH_VELOCITIES[pitchType],
+  };
+}
+
+export function getPitchVelocity(pitcher, pitchType) {
+  return getPitchMixEntry(pitcher, pitchType).velocity;
+}
+
 export function choosePitchType(pitcher, random = Math.random) {
-  const mix = pitcher?.pitchMix || {
+  const fallbackMix = {
     fourSeam: 0.45,
     slider: 0.25,
     curve: 0.12,
     fork: 0.18,
   };
 
+  const sourceMix = pitcher?.pitchMix || fallbackMix;
   const roll = random();
   let cumulative = 0;
 
   for (const key of ["fourSeam", "slider", "curve", "fork"]) {
-    cumulative += mix[key] || 0;
+    const entry = sourceMix[key];
+    const usage = typeof entry === "number" ? entry : Number(entry?.usage || fallbackMix[key] || 0);
+    cumulative += usage;
     if (roll <= cumulative) {
       return key;
     }
@@ -105,6 +141,7 @@ export function buildPitchExecutionContext({
   shouldPatchLastPitch,
 }) {
   const pitchType = choosePitchType(pitcher, random);
+  const pitchVelocity = getPitchVelocity(pitcher, pitchType);
   const baseCourse = chooseCourse(pitcher, random);
 
   const controlValue = Number(pitcher?.ratings?.control || 50);
@@ -168,6 +205,7 @@ export function buildPitchExecutionContext({
 
   return {
     pitchType,
+    pitchVelocity,
     baseCourse,
     course,
     probs: {
@@ -179,6 +217,7 @@ export function buildPitchExecutionContext({
       drift,
       baseCourse,
       course,
+      pitchVelocity,
     },
     isStrike,
     swung,
