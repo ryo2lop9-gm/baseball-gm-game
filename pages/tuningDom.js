@@ -47,6 +47,8 @@ export function getTuningDom() {
     tuningHomePlayerStatsTable: document.getElementById("tuningHomePlayerStatsTable"),
     tuningAwayQoCTable: document.getElementById("tuningAwayQoCTable"),
     tuningHomeQoCTable: document.getElementById("tuningHomeQoCTable"),
+    tuningAwayVelocityBandTable: document.getElementById("tuningAwayVelocityBandTable"),
+    tuningHomeVelocityBandTable: document.getElementById("tuningHomeVelocityBandTable"),
     tuningSeasonHeadline: document.getElementById("tuningSeasonHeadline"),
     tuningSeasonGamesValue: document.getElementById("tuningSeasonGamesValue"),
     tuningSeasonRecordValue: document.getElementById("tuningSeasonRecordValue"),
