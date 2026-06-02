@@ -64,6 +64,10 @@ export function getTuningDom() {
     editorEyeInput: document.getElementById("editorEyeInput"),
     editorControlInput: document.getElementById("editorControlInput"),
     editorStuffInput: document.getElementById("editorStuffInput"),
+    editorFourSeamVeloInput: document.getElementById("editorFourSeamVeloInput"),
+    editorSliderVeloInput: document.getElementById("editorSliderVeloInput"),
+    editorCurveVeloInput: document.getElementById("editorCurveVeloInput"),
+    editorForkVeloInput: document.getElementById("editorForkVeloInput"),
     applyPlayerEditBtn: document.getElementById("applyPlayerEditBtn"),
     reloadEditorBtn: document.getElementById("reloadEditorBtn"),
   };
