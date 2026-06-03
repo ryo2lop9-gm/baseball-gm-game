@@ -55,6 +55,8 @@ export function getTuningDom() {
     tuningSeasonSummaryTable: document.getElementById("tuningSeasonSummaryTable"),
     tuningSeasonAwayQoCTable: document.getElementById("tuningSeasonAwayQoCTable"),
     tuningSeasonHomeQoCTable: document.getElementById("tuningSeasonHomeQoCTable"),
+    tuningSeasonAwayVelocityBandTable: document.getElementById("tuningSeasonAwayVelocityBandTable"),
+    tuningSeasonHomeVelocityBandTable: document.getElementById("tuningSeasonHomeVelocityBandTable"),
     tuningSeasonAwayPlayerStatsTable: document.getElementById("tuningSeasonAwayPlayerStatsTable"),
     tuningSeasonHomePlayerStatsTable: document.getElementById("tuningSeasonHomePlayerStatsTable"),
 
