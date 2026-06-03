@@ -699,6 +699,24 @@ export function renderTuningSeasonTables(season, dom) {
       : `<div>まだシーズン結果がありません。</div>`;
   }
 
+  if (dom.tuningSeasonAwayVelocityBandTable) {
+    dom.tuningSeasonAwayVelocityBandTable.innerHTML = season
+      ? buildVelocityBandStatsTable(
+          `${season.awayName} シーズン球速帯別成績`,
+          season.away.velocityBandStats
+        )
+      : `<div>まだシーズン結果がありません。</div>`;
+  }
+
+  if (dom.tuningSeasonHomeVelocityBandTable) {
+    dom.tuningSeasonHomeVelocityBandTable.innerHTML = season
+      ? buildVelocityBandStatsTable(
+          `${season.homeName} シーズン球速帯別成績`,
+          season.home.velocityBandStats
+        )
+      : `<div>まだシーズン結果がありません。</div>`;
+  }
+
   if (dom.tuningSeasonAwayPlayerStatsTable) {
     dom.tuningSeasonAwayPlayerStatsTable.innerHTML = season
       ? buildSeasonPlayerStatsTable(getSeasonPlayers(season, "away"))
