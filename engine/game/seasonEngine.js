@@ -3,6 +3,7 @@ import {
   simulateGameMutable,
   createFastSimulationOptions,
 } from "../core/engineCore.js";
+import { createEmptyVelocityBandStats } from "../../services/velocityBandStatsService.js";
 
 function emptyQoC() {
   return {
@@ -36,6 +37,36 @@ function addQoC(target, source = {}) {
   }
 }
 
+function addVelocityBandStats(target, source = {}) {
+  for (const [bandId, sourceLine] of Object.entries(source || {})) {
+    if (!target[bandId]) {
+      target[bandId] = {
+        bandId: sourceLine.bandId || bandId,
+        label: sourceLine.label || bandId,
+        PA: 0,
+        AB: 0,
+        H: 0,
+        doubles: 0,
+        triples: 0,
+        HR: 0,
+        BB: 0,
+        K: 0,
+        totalBases: 0,
+      };
+    }
+
+    target[bandId].PA += sourceLine.PA || 0;
+    target[bandId].AB += sourceLine.AB || 0;
+    target[bandId].H += sourceLine.H || 0;
+    target[bandId].doubles += sourceLine.doubles || 0;
+    target[bandId].triples += sourceLine.triples || 0;
+    target[bandId].HR += sourceLine.HR || 0;
+    target[bandId].BB += sourceLine.BB || 0;
+    target[bandId].K += sourceLine.K || 0;
+    target[bandId].totalBases += sourceLine.totalBases || 0;
+  }
+}
+
 function totalQoC(qoc) {
   return Object.values(qoc || {}).reduce((sum, value) => sum + value, 0);
 }
@@ -62,6 +93,7 @@ function createSeasonTeamSummary() {
     strikeouts: 0,
     outsInPlay: 0,
     qoc: emptyQoC(),
+    velocityBandStats: createEmptyVelocityBandStats(),
   };
 }
 
@@ -75,6 +107,7 @@ function addTeamBox(target, source = {}) {
   target.strikeouts += source.strikeouts || 0;
   target.outsInPlay += source.outsInPlay || 0;
   addQoC(target.qoc, source.qoc);
+  addVelocityBandStats(target.velocityBandStats, source.velocityBandStats);
 }
 
 function sumPlayerStats(players) {
