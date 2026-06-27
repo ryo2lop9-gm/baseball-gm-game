@@ -1,5 +1,6 @@
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -32,6 +33,11 @@ def parse_args():
             "Output directory. Defaults to Statcast_<year>/ev_la_table "
             "or Statcast_Combined/ev_la_table."
         ),
+    )
+    parser.add_argument(
+        "--copy-to-data",
+        action="store_true",
+        help="Copy the generated ev_la_lookup.json to data/ev_la_lookup.json.",
     )
     return parser.parse_args()
 
@@ -99,10 +105,16 @@ def load_statcast_frames(years):
     for year in years:
         input_csv = input_csv_for_year(year)
         if not input_csv.exists():
-            raise FileNotFoundError(f"Statcast CSV not found: {input_csv}")
+            raise FileNotFoundError(
+                f"Statcast CSV not found for season {year}: {input_csv}. "
+                f"Run download_statcast.py --years {year} first."
+            )
 
         print(f"Reading: {input_csv}")
-        frames.append(pd.read_csv(input_csv))
+        try:
+            frames.append(pd.read_csv(input_csv))
+        except Exception as exc:
+            raise RuntimeError(f"Failed to read Statcast CSV for season {year}: {input_csv}") from exc
 
     return pd.concat(frames, ignore_index=True)
 
@@ -245,11 +257,19 @@ def main():
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(lookup, f, ensure_ascii=False, indent=2)
 
+    copied_json = None
+    if args.copy_to_data:
+        copied_json = Path("data") / "ev_la_lookup.json"
+        copied_json.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(output_json, copied_json)
+
     print("=" * 50)
     print("EV/LA lookup complete")
     print(f"Years: {', '.join(str(year) for year in years)}")
     print(f"CSV : {output_csv}")
     print(f"JSON: {output_json}")
+    if copied_json:
+        print(f"Copied game JSON: {copied_json}")
     print(f"Grid cells: {len(grouped):,}")
     print(f"Batted balls: {len(filtered_df):,}")
 
