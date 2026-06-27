@@ -1,4 +1,4 @@
-import { chooseQoC } from "./qocService.js";
+import { generateFairBattedBall } from "./evLaContactService.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 function clamp(value, min, max) {
@@ -423,6 +423,28 @@ export function resolvePlateAppearanceResult({
     return;
   }
 
-  const qoc = chooseQoC(batter, course, pitchType);
-  resolveQoCResult(state, batter, course, pitchType, qoc, options);
+  const battedBall = generateFairBattedBall({
+    batter,
+    course,
+    pitchType,
+    pitchVelocity,
+    isStrike,
+    random,
+  });
+
+  emitLastPitchPatch(options, {
+    exitVelocity: battedBall.exitVelocity,
+    launchAngle: battedBall.launchAngle,
+    qoc: battedBall.qoc,
+  });
+
+  resolveQoCResult(
+    state,
+    batter,
+    course,
+    pitchType,
+    battedBall.qoc,
+    options,
+    battedBall
+  );
 }

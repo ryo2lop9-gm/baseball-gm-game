@@ -52,7 +52,15 @@ function emitLastPitchPatch(options, patch) {
   options.onLastPitchPatch(patch);
 }
 
-function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
+function resolveQoCResult(
+  state,
+  batter,
+  course,
+  pitchType,
+  qoc,
+  options,
+  battedBall = null
+) {
   const side = currentSide(state);
   const pitchVelocity = options?.pitchVelocity ?? null;
 
@@ -63,6 +71,7 @@ function resolveQoCResult(state, batter, course, pitchType, qoc, options) {
     pitchType,
     pitchVelocity,
     qoc,
+    battedBall,
     options,
     random,
     addQoCToBox: (runtimeState, runtimeQoc) =>

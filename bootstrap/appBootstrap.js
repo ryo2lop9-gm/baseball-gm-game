@@ -4,6 +4,7 @@ import { createRootStatePersistence } from "./persistence.js";
 import { createSaveControls } from "./saveControls.js";
 import { createRootStateFactory } from "./rootStateFactory.js";
 import { createRootStateStore } from "./rootStateStore.js";
+import { loadEvLaLookup } from "../services/evLaLookupStore.js";
 
 import { createGMDeskPageController } from "../pages/gmDeskPage.js";
 import { createStatsPageController } from "../pages/statsPage.js";
@@ -20,6 +21,10 @@ import {
 } from "../state/appState.js";
 
 export function bootstrapApp() {
+  loadEvLaLookup().catch((error) => {
+    console.warn("EV/LA lookup load failed; using QoC fallback.", error);
+  });
+
   const routeDom = createRouteDom();
   const gmFactory = createGMDeskFactory();
   const tuningBootstrap = createTuningBootstrap();

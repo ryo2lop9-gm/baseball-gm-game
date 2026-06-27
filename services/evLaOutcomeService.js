@@ -5,10 +5,16 @@ function clamp(value, min, max) {
 function makeEvBin(exitVelocity) {
   const ev = Number(exitVelocity);
 
+  if (!Number.isFinite(ev)) return "85";
+  return String(Math.round(clamp(ev, 50, 120)));
+}
+
+function makeLegacyEvBin(exitVelocity) {
+  const ev = Number(exitVelocity);
+
   if (!Number.isFinite(ev)) return "80_85";
   if (ev < 50) return "under_50";
   if (ev >= 120) return "120_plus";
-
   const lower = Math.floor(ev / 5) * 5;
   const upper = lower + 5;
 
@@ -18,10 +24,16 @@ function makeEvBin(exitVelocity) {
 function makeLaBin(launchAngle) {
   const la = Number(launchAngle);
 
+  if (!Number.isFinite(la)) return "12";
+  return String(Math.round(clamp(la, -90, 90)));
+}
+
+function makeLegacyLaBin(launchAngle) {
+  const la = Number(launchAngle);
+
   if (!Number.isFinite(la)) return "10_15";
   if (la < -60) return "under_-60";
   if (la >= 70) return "70_plus";
-
   const lower = Math.floor(la / 5) * 5;
   const upper = lower + 5;
 
@@ -60,13 +72,18 @@ export function getEvLaKey(exitVelocity, launchAngle) {
   return `${makeEvBin(exitVelocity)}|${makeLaBin(launchAngle)}`;
 }
 
+export function getLegacyEvLaKey(exitVelocity, launchAngle) {
+  return `${makeLegacyEvBin(exitVelocity)}|${makeLegacyLaBin(launchAngle)}`;
+}
+
 export function getEvLaOutcomeProbabilities({
   exitVelocity,
   launchAngle,
   lookup,
 }) {
   const key = getEvLaKey(exitVelocity, launchAngle);
-  const row = lookup?.[key];
+  const legacyKey = getLegacyEvLaKey(exitVelocity, launchAngle);
+  const row = lookup?.[key] || lookup?.[legacyKey];
 
   if (!row) {
     return {
@@ -84,7 +101,7 @@ export function getEvLaOutcomeProbabilities({
   }
 
   return {
-    key,
+    key: row === lookup?.[key] ? key : legacyKey,
     source: "ev_la_lookup",
     sampleQuality: row.sampleQuality,
     probabilities: normalizeProbabilities(row),

@@ -1,5 +1,7 @@
 import { getHitTypeProbabilities } from "../config/hitOutcomeConfig.js";
 import { getPitchTypeLabel } from "../config/pitchConfig.js";
+import { getEvLaOutcomeProbabilities } from "./evLaOutcomeService.js";
+import { getLoadedEvLaLookup } from "./evLaLookupStore.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 function recordVelocityResult(state, side, pitchVelocity, result) {
@@ -13,6 +15,34 @@ function recordVelocityResult(state, side, pitchVelocity, result) {
   );
 }
 
+function formatBattedBallSuffix(battedBall, outcomeSource, sampleQuality) {
+  if (!battedBall) return "";
+
+  const sourceText =
+    outcomeSource === "ev_la_lookup" ? ` / ${sampleQuality || "unknown"}` : "";
+
+  return ` (${battedBall.exitVelocity}mph, ${battedBall.launchAngle}°${sourceText})`;
+}
+
+function resolveOutcomeModel(qoc, battedBall) {
+  const lookup = getLoadedEvLaLookup();
+
+  if (lookup && battedBall) {
+    return getEvLaOutcomeProbabilities({
+      exitVelocity: battedBall.exitVelocity,
+      launchAngle: battedBall.launchAngle,
+      lookup,
+    });
+  }
+
+  return {
+    key: null,
+    source: "qoc_fallback",
+    sampleQuality: "legacy",
+    probabilities: getHitTypeProbabilities(qoc),
+  };
+}
+
 export function resolveContactResult({
   state,
   batter,
@@ -20,6 +50,7 @@ export function resolveContactResult({
   pitchType,
   pitchVelocity,
   qoc,
+  battedBall,
   options,
   random,
   addQoCToBox,
@@ -32,10 +63,21 @@ export function resolveContactResult({
   emitLog,
   emitLastPitchPatch,
 }) {
-  const probs = getHitTypeProbabilities(qoc);
+  const outcomeModel = resolveOutcomeModel(qoc, battedBall);
+  const probs = outcomeModel.probabilities;
   const roll = random();
+  const battedBallSuffix = formatBattedBallSuffix(
+    battedBall,
+    outcomeModel.source,
+    outcomeModel.sampleQuality
+  );
 
   addQoCToBox(state, qoc);
+  emitLastPitchPatch(options, {
+    outcomeSource: outcomeModel.source,
+    evLaKey: outcomeModel.key,
+    sampleQuality: outcomeModel.sampleQuality,
+  });
 
   const outCut = probs.out;
   const singleCut = outCut + probs.single;
@@ -51,10 +93,12 @@ export function resolveContactResult({
       AB: 1,
       H: 0,
     });
-    emitLastPitchPatch(options, { resultText: `${qoc} / 凡打` });
+    emitLastPitchPatch(options, { resultText: `${qoc} / 凡打${battedBallSuffix}` });
     emitLog(
       options,
-      `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で凡打。`
+      `${batter.name}: ${getPitchTypeLabel(
+        pitchType
+      )}を${qoc}で凡打。${battedBallSuffix}`
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
@@ -71,12 +115,12 @@ export function resolveContactResult({
       H: 1,
       totalBases: 1,
     });
-    emitLastPitchPatch(options, { resultText: `${qoc} / 安打` });
+    emitLastPitchPatch(options, { resultText: `${qoc} / 安打${battedBallSuffix}` });
     emitLog(
       options,
       `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で安打。${
         runs > 0 ? `${runs}点` : ""
-      }`
+      }${battedBallSuffix}`
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
@@ -98,12 +142,12 @@ export function resolveContactResult({
       doubles: 1,
       totalBases: 2,
     });
-    emitLastPitchPatch(options, { resultText: `${qoc} / 二塁打` });
+    emitLastPitchPatch(options, { resultText: `${qoc} / 二塁打${battedBallSuffix}` });
     emitLog(
       options,
       `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で二塁打。${
         runs > 0 ? `${runs}点` : ""
-      }`
+      }${battedBallSuffix}`
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
@@ -125,12 +169,12 @@ export function resolveContactResult({
       triples: 1,
       totalBases: 3,
     });
-    emitLastPitchPatch(options, { resultText: `${qoc} / 三塁打` });
+    emitLastPitchPatch(options, { resultText: `${qoc} / 三塁打${battedBallSuffix}` });
     emitLog(
       options,
       `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で三塁打。${
         runs > 0 ? `${runs}点` : ""
-      }`
+      }${battedBallSuffix}`
     );
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
@@ -151,10 +195,12 @@ export function resolveContactResult({
     HR: 1,
     totalBases: 4,
   });
-  emitLastPitchPatch(options, { resultText: `${qoc} / 本塁打` });
+  emitLastPitchPatch(options, { resultText: `${qoc} / 本塁打${battedBallSuffix}` });
   emitLog(
     options,
-    `${batter.name}: ${getPitchTypeLabel(pitchType)}を${qoc}で本塁打。${runs}点`
+    `${batter.name}: ${getPitchTypeLabel(
+      pitchType
+    )}を${qoc}で本塁打。${runs}点${battedBallSuffix}`
   );
   moveToNextBatter(state);
   finishPlateAppearanceState(state, options);

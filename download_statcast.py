@@ -1,67 +1,93 @@
-from pybaseball import statcast
-import pandas as pd
+import argparse
+import calendar
 import time
+from datetime import date
 from pathlib import Path
 
-YEAR = 2025
+import pandas as pd
+from pybaseball import statcast
 
-# 保存先フォルダ
-output_dir = Path(f"Statcast_{YEAR}")
-output_dir.mkdir(exist_ok=True)
 
-# 月ごとに取得（37日制限対策）
-months = [
-    ("2025-03-01", "2025-03-31"),
-    ("2025-04-01", "2025-04-30"),
-    ("2025-05-01", "2025-05-31"),
-    ("2025-06-01", "2025-06-30"),
-    ("2025-07-01", "2025-07-31"),
-    ("2025-08-01", "2025-08-31"),
-    ("2025-09-01", "2025-09-30"),
-]
+DEFAULT_YEARS = [2025]
+SEASON_MONTHS = range(3, 10)
 
-all_data = []
 
-for start, end in months:
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Download monthly Statcast batted-ball CSV files."
+    )
+    parser.add_argument(
+        "--years",
+        nargs="+",
+        type=int,
+        default=DEFAULT_YEARS,
+        help="Seasons to download, for example: --years 2019 2020 2021",
+    )
+    parser.add_argument(
+        "--sleep",
+        type=float,
+        default=3.0,
+        help="Seconds to wait between pybaseball requests.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Redownload monthly CSV files that already exist.",
+    )
+    return parser.parse_args()
 
-    print("=" * 50)
-    print(f"{start} ～ {end} を取得中")
 
-    df = statcast(start_dt=start, end_dt=end)
+def month_range(year, month):
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, 1).isoformat(), date(year, month, last_day).isoformat()
 
-    # 打球だけ抽出
-    df = df[
-        df["launch_speed"].notna()
-        & df["launch_angle"].notna()
-    ].copy()
 
+def batted_balls_only(df):
+    return df[df["launch_speed"].notna() & df["launch_angle"].notna()].copy()
+
+
+def download_month(year, start, end, output_dir, force):
     filename = output_dir / f"{start}_{end}.csv"
 
-    df.to_csv(
-        filename,
-        index=False,
-        encoding="utf-8-sig"
-    )
+    if filename.exists() and not force:
+        print(f"Using cached: {filename}")
+        return pd.read_csv(filename)
 
-    print(f"{len(df):,} 打球保存")
-    print(filename)
+    print("=" * 50)
+    print(f"Downloading {start} to {end}")
+    df = statcast(start_dt=start, end_dt=end)
+    df = batted_balls_only(df)
+    df.to_csv(filename, index=False, encoding="utf-8-sig")
+    print(f"Saved {len(df):,} batted balls: {filename}")
+    return df
 
-    all_data.append(df)
 
-    time.sleep(3)
+def download_year(year, sleep_seconds, force):
+    output_dir = Path(f"Statcast_{year}")
+    output_dir.mkdir(exist_ok=True)
 
-# 全期間結合
-all_df = pd.concat(all_data, ignore_index=True)
+    all_data = []
+    for month in SEASON_MONTHS:
+        start, end = month_range(year, month)
+        df = download_month(year, start, end, output_dir, force)
+        all_data.append(df)
+        time.sleep(sleep_seconds)
 
-all_filename = output_dir / f"Statcast_{YEAR}_All.csv"
+    all_df = pd.concat(all_data, ignore_index=True)
+    all_filename = output_dir / f"Statcast_{year}_All.csv"
+    all_df.to_csv(all_filename, index=False, encoding="utf-8-sig")
 
-all_df.to_csv(
-    all_filename,
-    index=False,
-    encoding="utf-8-sig"
-)
+    print("=" * 50)
+    print(f"Saved season {year}: {len(all_df):,} batted balls")
+    print(all_filename)
 
-print("=" * 50)
-print("全データ保存完了")
-print(f"総打球数：{len(all_df):,}")
-print(all_filename)
+
+def main():
+    args = parse_args()
+
+    for year in sorted(set(args.years)):
+        download_year(year, args.sleep, args.force)
+
+
+if __name__ == "__main__":
+    main()
