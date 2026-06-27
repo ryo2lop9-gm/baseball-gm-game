@@ -15,13 +15,17 @@ function recordVelocityResult(state, side, pitchVelocity, result) {
   );
 }
 
-function formatBattedBallSuffix(battedBall, outcomeSource, sampleQuality) {
+function formatBattedBallSuffix(battedBall, outcomeSource, sampleQuality, evLaKey) {
   if (!battedBall) return "";
 
-  const sourceText =
-    outcomeSource === "ev_la_lookup" ? ` / ${sampleQuality || "unknown"}` : "";
+  const parts = [
+    `${battedBall.exitVelocity}mph, ${battedBall.launchAngle}°`,
+    sampleQuality || "unknown",
+    outcomeSource || "-",
+    evLaKey || "-",
+  ];
 
-  return ` (${battedBall.exitVelocity}mph, ${battedBall.launchAngle}°${sourceText})`;
+  return ` (${parts.join(" / ")})`;
 }
 
 function resolveOutcomeModel(qoc, battedBall) {
@@ -69,7 +73,8 @@ export function resolveContactResult({
   const battedBallSuffix = formatBattedBallSuffix(
     battedBall,
     outcomeModel.source,
-    outcomeModel.sampleQuality
+    outcomeModel.sampleQuality,
+    outcomeModel.key
   );
 
   addQoCToBox(state, qoc);
