@@ -10,6 +10,7 @@ from pybaseball import statcast
 
 DEFAULT_YEARS = [2025]
 SEASON_MONTHS = range(3, 10)
+REQUIRED_BATTED_BALL_COLUMNS = ["launch_speed", "launch_angle"]
 
 
 def parse_args():
@@ -42,7 +43,18 @@ def month_range(year, month):
     return date(year, month, 1).isoformat(), date(year, month, last_day).isoformat()
 
 
+def has_batted_ball_columns(df):
+    return all(column in df.columns for column in REQUIRED_BATTED_BALL_COLUMNS)
+
+
+def log_no_batted_ball_data(year, start, end):
+    print(f"No batted ball data for {year} {start} to {end}. Skipping.")
+
+
 def batted_balls_only(df):
+    if df.empty or not has_batted_ball_columns(df):
+        return pd.DataFrame()
+
     return df[df["launch_speed"].notna() & df["launch_angle"].notna()].copy()
 
 
@@ -52,12 +64,19 @@ def download_month(year, start, end, output_dir, force):
     if filename.exists() and not force:
         print(f"Using cached: {filename}")
         try:
-            return pd.read_csv(filename)
+            df = pd.read_csv(filename)
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to read cached Statcast CSV for {year} {start} to {end}: "
                 f"{filename}"
             ) from exc
+
+        df = batted_balls_only(df)
+        if df.empty:
+            log_no_batted_ball_data(year, start, end)
+            return None
+
+        return df
 
     print("=" * 50)
     print(f"Downloading {year}: {start} to {end}")
@@ -65,6 +84,12 @@ def download_month(year, start, end, output_dir, force):
     try:
         df = statcast(start_dt=start, end_dt=end)
         df = batted_balls_only(df)
+        if df.empty:
+            log_no_batted_ball_data(year, start, end)
+            if force and filename.exists():
+                filename.unlink()
+            return None
+
         df.to_csv(filename, index=False, encoding="utf-8-sig")
     except Exception as exc:
         raise RuntimeError(
@@ -85,8 +110,14 @@ def download_year(year, sleep_seconds, force):
         start, end = month_range(year, month)
         print(f"Preparing {year}: {start} to {end}")
         df = download_month(year, start, end, output_dir, force)
-        all_data.append(df)
+        if df is not None and not df.empty:
+            all_data.append(df)
         time.sleep(sleep_seconds)
+
+    if not all_data:
+        print("=" * 50)
+        print(f"No batted ball CSVs found for season {year}. Skipping All CSV.")
+        return
 
     all_df = pd.concat(all_data, ignore_index=True)
     all_filename = output_dir / f"Statcast_{year}_All.csv"
