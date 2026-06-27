@@ -513,6 +513,16 @@ function buildExecutionDebugLine(lastPitch) {
   return parts.length ? ` / ${parts.join(" / ")}` : "";
 }
 
+function buildEvLaLookupLine(lastPitch) {
+  const source = lastPitch?.outcomeSource;
+  const key = lastPitch?.evLaKey;
+  const sample = lastPitch?.sampleQuality;
+
+  if (!source && !key && !sample) return "";
+
+  return ` / EVLA: ${source || "-"} / ${key || "-"} / ${sample || "-"}`;
+}
+
 function renderZone(state, dom) {
   if (!dom.zoneGrid) return;
 
@@ -546,9 +556,10 @@ function renderZone(state, dom) {
     const ballLine = !lastPitch?.isStrike ? buildBallDebugLine(lastPitch) : "";
     const strikeLine = lastPitch?.isStrike ? buildStrikeDebugLine(lastPitch) : "";
     const executionLine = buildExecutionDebugLine(lastPitch);
+    const evLaLookupLine = buildEvLaLookupLine(lastPitch);
 
     dom.zoneText.textContent =
-      `${pitchType}${pitchVelocity} / ${course} / ${resultText}${ballLine}${strikeLine}${executionLine}`;
+      `${pitchType}${pitchVelocity} / ${course} / ${resultText}${ballLine}${strikeLine}${executionLine}${evLaLookupLine}`;
   }
 }
 

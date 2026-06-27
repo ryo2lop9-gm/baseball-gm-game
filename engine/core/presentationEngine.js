@@ -37,6 +37,10 @@ function createEmptyLastPitch() {
     mistakeRate: null,
     isMistake: null,
     drift: null,
+
+    outcomeSource: "",
+    evLaKey: "",
+    sampleQuality: "",
   };
 }
 

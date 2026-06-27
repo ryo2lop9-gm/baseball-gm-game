@@ -120,6 +120,9 @@ export function createInitialGameState(awayTeam, homeTeam) {
         resultText: "",
         zoneRow: null,
         zoneCol: null,
+        outcomeSource: "",
+        evLaKey: "",
+        sampleQuality: "",
       },
     },
   };
