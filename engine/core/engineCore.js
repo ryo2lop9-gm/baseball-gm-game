@@ -52,6 +52,8 @@ function emitLastPitchPatch(options, patch) {
   options.onLastPitchPatch(patch);
 }
 
+// Historical name: qoc is now a derived label carried into logs/analysis.
+// The contact resolver chooses outcomes from EV/LA lookup whenever battedBall exists.
 function resolveQoCResult(
   state,
   batter,

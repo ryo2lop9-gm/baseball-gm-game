@@ -435,6 +435,7 @@ export function resolvePlateAppearanceResult({
   emitLastPitchPatch(options, {
     exitVelocity: battedBall.exitVelocity,
     launchAngle: battedBall.launchAngle,
+    // QoC is a display/analysis label derived from the generated EV/LA.
     qoc: battedBall.qoc,
   });
 

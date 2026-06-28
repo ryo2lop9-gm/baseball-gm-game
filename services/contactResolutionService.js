@@ -31,6 +31,8 @@ function formatBattedBallSuffix(battedBall, outcomeSource, sampleQuality, evLaKe
 function resolveOutcomeModel(qoc, battedBall) {
   const lookup = getLoadedEvLaLookup();
 
+  // Outcomes are resolved from EV/LA whenever a batted ball and lookup are available.
+  // QoC remains a derived label for analysis/logging, not the result driver.
   if (lookup && battedBall) {
     return getEvLaOutcomeProbabilities({
       exitVelocity: battedBall.exitVelocity,
@@ -39,6 +41,8 @@ function resolveOutcomeModel(qoc, battedBall) {
     });
   }
 
+  // Legacy safety net only: this preserves old-engine behavior if the EV/LA
+  // lookup is unavailable, but normal fair-ball outcomes should not depend on QoC.
   return {
     key: null,
     source: "qoc_fallback",
@@ -77,6 +81,8 @@ export function resolveContactResult({
     outcomeModel.key
   );
 
+  // qoc is recorded for analysis/logging only.
+  // Outcomes above come from EV/LA lookup, interpolation, or final fallback.
   addQoCToBox(state, qoc);
   emitLastPitchPatch(options, {
     outcomeSource: outcomeModel.source,

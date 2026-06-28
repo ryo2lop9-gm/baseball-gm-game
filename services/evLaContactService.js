@@ -58,6 +58,8 @@ function courseLaAdjustment(course) {
   return 0;
 }
 
+// QoC is a derived analysis label from EV/LA.
+// It must not drive the actual batted-ball outcome.
 export function classifyQoCFromEvLa(exitVelocity, launchAngle) {
   const ev = Number(exitVelocity);
   const la = Number(launchAngle);
@@ -113,6 +115,7 @@ export function generateFairBattedBall({
 
   const exitVelocity = clamp(evMean + gaussian(random) * evSpread, 50, 120);
   const launchAngle = clamp(laMean + gaussian(random) * laSpread, -90, 90);
+  // Keep QoC for logs, debug displays, and future analysis such as Barrel%.
   const qoc = classifyQoCFromEvLa(exitVelocity, launchAngle);
 
   return {
