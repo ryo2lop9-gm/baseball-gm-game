@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>EV/LA Interpolation Debug</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      line-height: 1.5;
+      margin: 24px;
+      max-width: 960px;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-top: 12px;
+    }
+
+    input {
+      font: inherit;
+      margin-top: 4px;
+      padding: 6px 8px;
+      width: 120px;
+    }
+
+    button {
+      font: inherit;
+      margin: 8px 8px 0 0;
+      padding: 6px 10px;
+    }
+
+    table {
+      border-collapse: collapse;
+      margin-top: 16px;
+      min-width: 420px;
+    }
+
+    th,
+    td {
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      text-align: left;
+    }
+
+    pre {
+      background: #f5f5f5;
+      overflow: auto;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>EV/LA Interpolation Debug</h1>
+
+  <label>
+    Exit Velocity
+    <input id="exitVelocityInput" type="number" step="0.1" value="95" />
+  </label>
+
+  <label>
+    Launch Angle
+    <input id="launchAngleInput" type="number" step="0.1" value="21" />
+  </label>
+
+  <button id="runButton" type="button">Run Lookup</button>
+
+  <h2>Presets</h2>
+  <div id="presetButtons"></div>
+
+  <h2>Summary</h2>
+  <table>
+    <tbody id="summaryBody"></tbody>
+  </table>
+
+  <h2>Probabilities</h2>
+  <table>
+    <tbody id="probabilityBody"></tbody>
+  </table>
+
+  <h2>Raw Result</h2>
+  <pre id="rawOutput">Loading lookup...</pre>
+
+  <script type="module">
+    import { loadEvLaLookup } from "./services/evLaLookupStore.js";
+    import { getEvLaOutcomeProbabilities } from "./services/evLaOutcomeService.js";
+
+    const presets = [
+      { label: "Normal: 95, 21", exitVelocity: 95, launchAngle: 21 },
+      { label: "Weak contact: 67, 20", exitVelocity: 67, launchAngle: 20 },
+      { label: "Extreme low angle: 52, -80", exitVelocity: 52, launchAngle: -80 },
+      { label: "Extreme high angle: 118, 85", exitVelocity: 118, launchAngle: 85 },
+      { label: "Interpolated boundary: 50, -90", exitVelocity: 50, launchAngle: -90 },
+      { label: "Boundary: 120, 90", exitVelocity: 120, launchAngle: 90 },
+    ];
+
+    const exitVelocityInput = document.getElementById("exitVelocityInput");
+    const launchAngleInput = document.getElementById("launchAngleInput");
+    const runButton = document.getElementById("runButton");
+    const presetButtons = document.getElementById("presetButtons");
+    const summaryBody = document.getElementById("summaryBody");
+    const probabilityBody = document.getElementById("probabilityBody");
+    const rawOutput = document.getElementById("rawOutput");
+
+    function formatValue(value) {
+      if (typeof value === "number") {
+        return Number.isInteger(value) ? String(value) : value.toFixed(6);
+      }
+
+      return value ?? "-";
+    }
+
+    function renderRows(target, rows) {
+      target.innerHTML = rows
+        .map(
+          ([label, value]) => `
+            <tr>
+              <th>${label}</th>
+              <td>${formatValue(value)}</td>
+            </tr>
+          `
+        )
+        .join("");
+    }
+
+    function renderResult({ exitVelocity, launchAngle, result }) {
+      renderRows(summaryBody, [
+        ["EV", exitVelocity],
+        ["LA", launchAngle],
+        ["key", result.key],
+        ["source", result.source],
+        ["sampleQuality", result.sampleQuality],
+        ["neighborCount", result.neighborCount],
+        ["neighborBattedBalls", result.neighborBattedBalls],
+      ]);
+
+      renderRows(probabilityBody, [
+        ["out", result.probabilities?.out],
+        ["single", result.probabilities?.single],
+        ["double", result.probabilities?.double],
+        ["triple", result.probabilities?.triple],
+        ["homeRun", result.probabilities?.homeRun],
+      ]);
+
+      rawOutput.textContent = JSON.stringify(result, null, 2);
+    }
+
+    function readInputs() {
+      return {
+        exitVelocity: Number(exitVelocityInput.value),
+        launchAngle: Number(launchAngleInput.value),
+      };
+    }
+
+    const lookup = await loadEvLaLookup();
+
+    window.debugEvLa = async function debugEvLa(exitVelocity, launchAngle) {
+      const result = getEvLaOutcomeProbabilities({
+        exitVelocity,
+        launchAngle,
+        lookup,
+      });
+
+      console.table(result.probabilities);
+      console.log(result);
+      renderResult({ exitVelocity, launchAngle, result });
+      return result;
+    };
+
+    function runFromInputs() {
+      const { exitVelocity, launchAngle } = readInputs();
+      window.debugEvLa(exitVelocity, launchAngle).catch((error) => {
+        rawOutput.textContent = error.stack || String(error);
+        console.error(error);
+      });
+    }
+
+    for (const preset of presets) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = preset.label;
+      button.addEventListener("click", () => {
+        exitVelocityInput.value = preset.exitVelocity;
+        launchAngleInput.value = preset.launchAngle;
+        runFromInputs();
+      });
+      presetButtons.append(button);
+    }
+
+    runButton.addEventListener("click", runFromInputs);
+
+    runFromInputs();
+  </script>
+</body>
+</html>
