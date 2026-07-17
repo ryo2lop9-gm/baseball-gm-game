@@ -117,7 +117,7 @@ export function resolveContactResult({
   );
 
   // qoc is recorded for analysis/logging only.
-  // Outcomes above come from EV/LA smoothing, neighbors, or emergency fallback.
+  // Outcomes above come only from EV/LA target and neighbor Statcast data.
   addQoCToBox(state, qoc);
   emitLastPitchPatch(options, {
     outcomeSource: outcomeModel.source,

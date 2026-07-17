@@ -89,11 +89,12 @@
       { label: "Good: 95, 21", exitVelocity: 95, launchAngle: 21 },
       { label: "Low sample: 67, 20", exitVelocity: 67, launchAngle: 20 },
       { label: "Very low: 50, -90", exitVelocity: 50, launchAngle: -90 },
-      { label: "None: 118, 85", exitVelocity: 118, launchAngle: 85 },
+      { label: "None + local: 51, -90", exitVelocity: 51, launchAngle: -90 },
+      { label: "Expanded: 50, 90", exitVelocity: 50, launchAngle: 90 },
       { label: "Extreme low: 52, -80", exitVelocity: 52, launchAngle: -80 },
-      { label: "Boundary: 120, 90", exitVelocity: 120, launchAngle: 90 },
+      { label: "Extreme high: 118, 85", exitVelocity: 118, launchAngle: 85 },
       {
-        label: "Emergency fallback mock",
+        label: "Invalid lookup mock",
         exitVelocity: 95,
         launchAngle: 21,
         useEmptyLookup: true,
@@ -143,11 +144,21 @@
         ["source", result.source],
         ["target sampleQuality", result.sampleQuality],
         ["target battedBalls", smoothing.targetBattedBalls],
-        ["neighborCount", smoothing.neighborCount],
-        ["weightedNeighborBattedBalls", smoothing.weightedNeighborBattedBalls],
-        ["effectivePriorStrength", smoothing.effectivePriorStrength],
-        ["reliability", smoothing.reliability],
+        ["neighborMode", smoothing.neighborMode],
+        ["expansionLevel", smoothing.expansionLevel],
         ["searchRange", smoothing.searchRange],
+        ["neighborCount", smoothing.neighborCount],
+        ["neighborBattedBalls", smoothing.neighborBattedBalls],
+        ["weightedNeighborBattedBalls", smoothing.weightedNeighborBattedBalls],
+        ["neighborEffectiveSampleSize", smoothing.neighborEffectiveSampleSize],
+        ["configuredPriorStrength", smoothing.configuredPriorStrength],
+        ["effectivePriorStrength", smoothing.effectivePriorStrength],
+        ["configuredReliability", smoothing.configuredReliability],
+        ["targetWeight", smoothing.targetWeight],
+        ["nearestDistanceSquared", smoothing.nearestDistanceSquared],
+        ["nearestEvDistance", smoothing.nearestEvDistance],
+        ["nearestLaDistance", smoothing.nearestLaDistance],
+        ["physicalConstraints", smoothing.physicalConstraints],
       ]);
 
       renderRows(probabilityBody, [
@@ -159,6 +170,24 @@
       ]);
 
       rawOutput.textContent = JSON.stringify(result, null, 2);
+    }
+
+    function renderError({ exitVelocity, launchAngle, error }) {
+      renderRows(summaryBody, [
+        ["EV", exitVelocity],
+        ["LA", launchAngle],
+        ["error code", error.code || "ERROR"],
+        ["message", error.message],
+      ]);
+      probabilityBody.replaceChildren();
+      rawOutput.textContent = JSON.stringify(
+        {
+          code: error.code || "ERROR",
+          message: error.message,
+        },
+        null,
+        2
+      );
     }
 
     function readInputs() {
@@ -189,10 +218,12 @@
 
     function runFromInputs(lookupForRun = lookup) {
       const { exitVelocity, launchAngle } = readInputs();
-      Promise.resolve(runLookup(exitVelocity, launchAngle, lookupForRun)).catch((error) => {
-        rawOutput.textContent = error.stack || String(error);
-        console.error(error);
-      });
+      try {
+        runLookup(exitVelocity, launchAngle, lookupForRun);
+      } catch (error) {
+        renderError({ exitVelocity, launchAngle, error });
+        if (error.code !== "EV_LA_LOOKUP_INVALID") console.error(error);
+      }
     }
 
     for (const preset of presets) {

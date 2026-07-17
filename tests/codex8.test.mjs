@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   SMOOTHING_CONFIG,
   getEvLaOutcomeProbabilities,
+  validateEvLaLookup,
 } from "../services/evLaOutcomeService.js";
 import { resolveContactResult } from "../services/contactResolutionService.js";
 import { simulateSeason } from "../engine/game/seasonEngine.js";
@@ -39,154 +40,370 @@ function makeRow({
 function assertProbabilityVector(probabilities) {
   const values = Object.values(probabilities);
   assert.equal(values.length, 5);
-  assert.ok(values.every((value) => value >= 0));
+  assert.ok(values.every((value) => Number.isFinite(value) && value >= 0));
   assert.ok(Math.abs(values.reduce((sum, value) => sum + value, 0) - 1) < 1e-12);
 }
 
-function makeTargetAndNeighborLookup(targetBattedBalls) {
-  return {
+function assertClose(actual, expected, tolerance = 1e-10) {
+  assert.ok(
+    Math.abs(actual - expected) <= tolerance,
+    `Expected ${actual} to be within ${tolerance} of ${expected}`
+  );
+}
+
+const LOCAL_COORDINATES = [
+  [94, 21],
+  [96, 21],
+  [95, 20],
+  [95, 22],
+  [94, 20],
+];
+
+function addCells(lookup, coordinates, rowFactory) {
+  coordinates.forEach(([ev, la], index) => {
+    lookup[`${ev}|${la}`] = rowFactory(index, ev, la);
+  });
+  return lookup;
+}
+
+function makeLocalLookup({ targetBattedBalls = 10, neighborBattedBalls = 100 } = {}) {
+  const lookup = {
     "95|21": makeRow({
       battedBalls: targetBattedBalls,
       out: targetBattedBalls,
       sampleQuality: targetBattedBalls >= 100 ? "good" : "low_sample",
     }),
-    "94|21": makeRow({ battedBalls: 500, homeRun: 500 }),
-    "96|21": makeRow({ battedBalls: 500, homeRun: 500 }),
   };
+
+  return addCells(lookup, LOCAL_COORDINATES, () =>
+    makeRow({
+      battedBalls: neighborBattedBalls,
+      homeRun: neighborBattedBalls,
+    })
+  );
 }
 
-test("smoothing produces a normalized five-outcome distribution", () => {
-  const result = getEvLaOutcomeProbabilities({
-    exitVelocity: 95,
-    launchAngle: 21,
-    lookup: makeTargetAndNeighborLookup(10),
+function getResult(lookup, exitVelocity = 95, launchAngle = 21, extra = {}) {
+  return getEvLaOutcomeProbabilities({
+    exitVelocity,
+    launchAngle,
+    lookup,
+    ...extra,
   });
+}
+
+let realLookupPromise;
+function loadRealLookup() {
+  realLookupPromise ||= readFile(
+    new URL("../data/ev_la_lookup.json", import.meta.url),
+    "utf8"
+  ).then(JSON.parse);
+  return realLookupPromise;
+}
+
+test("probabilities are nonnegative and normalized", () => {
+  const result = getResult(makeLocalLookup());
 
   assert.equal(result.source, "ev_la_smoothed");
-  assert.equal(result.smoothing.applied, true);
-  assert.equal(result.smoothing.effectivePriorStrength, 100);
-  assert.equal(
-    result.smoothing.reliability,
-    10 / (10 + SMOOTHING_CONFIG.priorStrength)
-  );
+  assert.equal(result.smoothing.neighborMode, "local");
   assertProbabilityVector(result.probabilities);
 });
 
-test("small target cells defer more strongly to neighbors than large cells", () => {
-  const small = getEvLaOutcomeProbabilities({
-    exitVelocity: 95,
-    launchAngle: 21,
-    lookup: makeTargetAndNeighborLookup(10),
-  });
-  const large = getEvLaOutcomeProbabilities({
-    exitVelocity: 95,
-    launchAngle: 21,
-    lookup: makeTargetAndNeighborLookup(1000),
-  });
+test("small cells defer more to neighbors and large cells retain target data", () => {
+  const small = getResult(makeLocalLookup({ targetBattedBalls: 10 }));
+  const large = getResult(makeLocalLookup({ targetBattedBalls: 1000 }));
 
-  assert.ok(small.probabilities.homeRun > 0.85);
-  assert.ok(large.probabilities.out > 0.85);
   assert.ok(small.probabilities.homeRun > large.probabilities.homeRun);
-  assert.ok(large.smoothing.reliability > small.smoothing.reliability);
+  assert.ok(large.probabilities.out > small.probabilities.out);
+  assert.ok(small.smoothing.targetWeight < large.smoothing.targetWeight);
+  assertProbabilityVector(small.probabilities);
+  assertProbabilityVector(large.probabilities);
 });
 
-test("zero-sample cells use neighbors only", () => {
-  const lookup = makeTargetAndNeighborLookup(0);
-  lookup["95|21"].sampleQuality = "none";
+test("targetWeight matches the actual target and effective-prior mixture", () => {
+  const result = getResult(makeLocalLookup({ targetBattedBalls: 10 }));
+  const expectedWeight =
+    10 / (10 + result.smoothing.effectivePriorStrength);
 
-  const result = getEvLaOutcomeProbabilities({
-    exitVelocity: 95,
-    launchAngle: 21,
-    lookup,
-  });
+  assertClose(result.smoothing.targetWeight, expectedWeight);
+  assertClose(result.probabilities.out, expectedWeight);
+  assertClose(
+    result.smoothing.configuredReliability,
+    10 / (10 + SMOOTHING_CONFIG.priorStrength)
+  );
+});
+
+test("zero-sample targets use the neighbor distribution", () => {
+  const lookup = makeLocalLookup({ targetBattedBalls: 0 });
+  lookup["95|21"].sampleQuality = "none";
+  const result = getResult(lookup);
 
   assert.equal(result.source, "ev_la_neighbor");
   assert.equal(result.sampleQuality, "none");
-  assert.equal(result.smoothing.targetBattedBalls, 0);
+  assert.equal(result.smoothing.targetWeight, 0);
   assert.equal(result.probabilities.homeRun, 1);
   assertProbabilityVector(result.probabilities);
 });
 
-test("neighbor search expands to the configured third range", () => {
-  const lookup = {
-    "95|21": makeRow({ battedBalls: 0, sampleQuality: "none" }),
-    "103|36": makeRow({ battedBalls: 50, out: 50 }),
-  };
-  const result = getEvLaOutcomeProbabilities({
-    exitVelocity: 95,
-    launchAngle: 21,
-    lookup,
-  });
+test("ESS follows the weighted-sample formula", () => {
+  const lookup = makeLocalLookup({ neighborBattedBalls: 20 });
+  const result = getResult(lookup);
+  let weightedSamples = 0;
+  let squaredWeightedSamples = 0;
 
-  assert.equal(result.source, "ev_la_neighbor");
-  assert.equal(result.smoothing.neighborCount, 1);
+  for (const [ev, la] of LOCAL_COORDINATES) {
+    const distanceSquared =
+      ((ev - 95) / SMOOTHING_CONFIG.evBandwidth) ** 2 +
+      ((la - 21) / SMOOTHING_CONFIG.laBandwidth) ** 2;
+    const weight = Math.exp(-0.5 * distanceSquared);
+    weightedSamples += 20 * weight;
+    squaredWeightedSamples += 20 * weight ** 2;
+  }
+
+  const expectedEss = weightedSamples ** 2 / squaredWeightedSamples;
+  assertClose(result.smoothing.neighborEffectiveSampleSize, expectedEss);
+});
+
+test("insufficient local ESS advances to expanded search", () => {
+  const lookup = makeLocalLookup({ neighborBattedBalls: 1 });
+  addCells(
+    lookup,
+    [
+      [99, 21],
+      [91, 21],
+      [95, 27],
+      [95, 15],
+      [99, 27],
+    ],
+    () => makeRow({ battedBalls: 100, single: 100 })
+  );
+
+  const result = getResult(lookup);
+  assert.equal(result.smoothing.neighborMode, "expanded");
+  assert.equal(result.smoothing.expansionLevel, 1);
+  assert.ok(result.smoothing.neighborEffectiveSampleSize >= 100);
+});
+
+test("insufficient local cell count advances even when local ESS is high", () => {
+  const lookup = {
+    "95|21": makeRow({ battedBalls: 10, out: 10 }),
+  };
+  addCells(lookup, LOCAL_COORDINATES.slice(0, 4), () =>
+    makeRow({ battedBalls: 100, single: 100 })
+  );
+  lookup["99|21"] = makeRow({ battedBalls: 100, single: 100 });
+
+  const result = getResult(lookup);
+  assert.equal(result.smoothing.neighborMode, "expanded");
+  assert.equal(result.smoothing.expansionLevel, 1);
+});
+
+test("expanded aggregation does not duplicate cells from earlier stages", () => {
+  const lookup = {
+    "95|21": makeRow({ battedBalls: 10, out: 10 }),
+  };
+  addCells(lookup, LOCAL_COORDINATES.slice(0, 4), () =>
+    makeRow({ battedBalls: 100, single: 100 })
+  );
+  lookup["99|21"] = makeRow({ battedBalls: 100, single: 100 });
+
+  const result = getResult(lookup);
+  assert.equal(result.smoothing.neighborCount, 5);
+  assert.equal(result.smoothing.neighborBattedBalls, 500);
+});
+
+test("local conditions produce local neighbor mode", () => {
+  const result = getResult(makeLocalLookup({ neighborBattedBalls: 20 }));
+
+  assert.equal(result.smoothing.neighborMode, "local");
+  assert.equal(result.smoothing.expansionLevel, 0);
   assert.deepEqual(result.smoothing.searchRange, {
-    evRadius: 10,
-    laRadius: 20,
+    evRadius: 3,
+    laRadius: 5,
   });
 });
 
-test("emergency fallback is used only without target or neighbor samples", () => {
-  const originalWarn = console.warn;
-  let warnings = 0;
-  console.warn = () => {
-    warnings += 1;
+test("data outside normal ranges uses distant neighbors", () => {
+  const lookup = {
+    "95|21": makeRow({ battedBalls: 0, sampleQuality: "none" }),
   };
+  addCells(
+    lookup,
+    [
+      [55, 21],
+      [54, 21],
+      [53, 21],
+      [52, 21],
+      [51, 21],
+    ],
+    () => makeRow({ battedBalls: 100, double: 100 })
+  );
 
-  try {
-    const lookup = {};
-    const first = getEvLaOutcomeProbabilities({
-      exitVelocity: 95,
-      launchAngle: 21,
-      lookup,
-    });
-    const second = getEvLaOutcomeProbabilities({
-      exitVelocity: 95,
-      launchAngle: 21,
-      lookup,
-    });
+  const result = getResult(lookup);
+  assert.equal(result.source, "ev_la_neighbor");
+  assert.equal(result.smoothing.neighborMode, "distant");
+  assert.equal(result.probabilities.double, 1);
+  assert.ok(result.smoothing.nearestEvDistance >= 40);
+});
 
-    assert.equal(first.source, "ev_la_emergency_fallback");
-    assert.strictEqual(second, first);
-    assert.equal(warnings, 1);
-    assertProbabilityVector(first.probabilities);
-  } finally {
-    console.warn = originalWarn;
+test("distant search consumes valid cells in distance order", () => {
+  const lookup = {
+    "95|21": makeRow({ battedBalls: 0, sampleQuality: "none" }),
+  };
+  for (let ev = 50; ev <= 55; ev += 1) {
+    lookup[`${ev}|21`] = makeRow({
+      battedBalls: 100,
+      out: ev >= 51 ? 100 : 0,
+      homeRun: ev === 50 ? 100 : 0,
+    });
+  }
+
+  const result = getResult(lookup);
+  assert.equal(result.smoothing.neighborMode, "distant");
+  assert.equal(result.smoothing.neighborCount, 5);
+  assert.equal(result.probabilities.out, 1);
+});
+
+test("distant search never exceeds the configured cell cap", () => {
+  const lookup = {};
+  for (let index = 0; index < 60; index += 1) {
+    lookup[`${index}|-90`] = makeRow({ battedBalls: 1, out: 1 });
+  }
+
+  const result = getResult(lookup, 120, 90);
+  assert.equal(result.smoothing.neighborMode, "distant");
+  assert.equal(
+    result.smoothing.neighborCount,
+    SMOOTHING_CONFIG.distantMaxNeighborCells
+  );
+  assert.equal(result.probabilities.out, 1);
+});
+
+test("no fixed emergency fallback source remains", async () => {
+  const source = await readFile(
+    new URL("../services/evLaOutcomeService.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.doesNotMatch(source, /source:\s*["']ev_la_emergency_fallback["']/);
+  assert.doesNotMatch(source, /EMERGENCY_PROBABILITIES/);
+});
+
+test("extreme real EV/LA cells no longer share a fixed distribution", async () => {
+  const lookup = await loadRealLookup();
+  const low = getResult(lookup, 52, -80);
+  const high = getResult(lookup, 118, 85);
+
+  assert.notDeepEqual(low.probabilities, high.probabilities);
+  assert.equal(low.probabilities.homeRun, 0);
+  assert.ok(["local", "expanded", "distant"].includes(low.smoothing.neighborMode));
+  assert.ok(["local", "expanded", "distant"].includes(high.smoothing.neighborMode));
+});
+
+test("invalid lookups throw EV_LA_LOOKUP_INVALID", () => {
+  const invalidLookups = [
+    null,
+    [],
+    {},
+    { invalid: makeRow({ battedBalls: 10, out: 10 }) },
+    { "95|21": makeRow({ battedBalls: 0 }) },
+    { "95|21": { battedBalls: 10 } },
+  ];
+
+  for (const lookup of invalidLookups) {
+    assert.throws(
+      () => getResult(lookup),
+      (error) => error.code === "EV_LA_LOOKUP_INVALID"
+    );
   }
 });
 
-test("cache reuses results without mutating lookup data", () => {
-  const lookup = makeTargetAndNeighborLookup(50);
-  const original = structuredClone(lookup);
-  const first = getEvLaOutcomeProbabilities({
-    exitVelocity: 95.2,
-    launchAngle: 20.8,
-    lookup,
-  });
-  const second = getEvLaOutcomeProbabilities({
-    exitVelocity: 95.4,
-    launchAngle: 21.2,
-    lookup,
-  });
+test("negative launch angles remove direct home runs and renormalize", () => {
+  for (const launchAngle of [-1, -80]) {
+    const lookup = {
+      [`95|${launchAngle}`]: makeRow({ battedBalls: 10, single: 5, homeRun: 5 }),
+    };
+    const result = getResult(lookup, 95, launchAngle);
 
-  assert.strictEqual(second, first);
-  assert.deepEqual(lookup, original);
+    assert.equal(result.probabilities.homeRun, 0);
+    assert.equal(result.probabilities.single, 1);
+    assert.deepEqual(result.smoothing.physicalConstraints, [
+      "negative_launch_angle_no_direct_home_run",
+    ]);
+    assertProbabilityVector(result.probabilities);
+  }
 });
 
-test("current Statcast lookup uses the smoothed source", async () => {
-  const lookup = JSON.parse(
-    await readFile(new URL("../data/ev_la_lookup.json", import.meta.url), "utf8")
-  );
-  const result = getEvLaOutcomeProbabilities({
-    exitVelocity: 95,
-    launchAngle: 21,
+test("negative launch angles with only home runs become certain outs", () => {
+  const lookup = {
+    "95|-1": makeRow({ battedBalls: 10, homeRun: 10 }),
+  };
+  const result = getResult(lookup, 95, -1);
+
+  assert.deepEqual(result.probabilities, {
+    out: 1,
+    single: 0,
+    double: 0,
+    triple: 0,
+    homeRun: 0,
+  });
+});
+
+test("raw negative LA is constrained even when it rounds to the zero-degree key", () => {
+  const lookup = {
+    "95|0": makeRow({ battedBalls: 10, single: 5, homeRun: 5 }),
+  };
+  const negative = getResult(lookup, 95, -0.4);
+  const positive = getResult(lookup, 95, 0.4);
+
+  assert.equal(negative.key, positive.key);
+  assert.equal(negative.probabilities.homeRun, 0);
+  assert.equal(positive.probabilities.homeRun, 0.5);
+});
+
+test("non-finite LA does not poison the default-key result cache", () => {
+  const lookup = {
+    "85|12": makeRow({ battedBalls: 10, out: 5, homeRun: 5 }),
+    "84|12": makeRow({ battedBalls: 100, out: 50, homeRun: 50 }),
+    "86|12": makeRow({ battedBalls: 100, out: 50, homeRun: 50 }),
+    "85|11": makeRow({ battedBalls: 100, out: 50, homeRun: 50 }),
+    "85|13": makeRow({ battedBalls: 100, out: 50, homeRun: 50 }),
+    "84|11": makeRow({ battedBalls: 100, out: 50, homeRun: 50 }),
+  };
+
+  const missingAngle = getEvLaOutcomeProbabilities({
+    exitVelocity: 85,
+    launchAngle: Number.NaN,
+    lookup,
+  });
+  const validAngle = getEvLaOutcomeProbabilities({
+    exitVelocity: 85,
+    launchAngle: 12,
     lookup,
   });
 
-  assert.equal(result.source, "ev_la_smoothed");
-  assert.equal(result.sampleQuality, "good");
-  assert.ok(result.smoothing.neighborCount > 0);
-  assertProbabilityVector(result.probabilities);
+  assert.ok(missingAngle.probabilities.homeRun > 0);
+  assert.strictEqual(validAngle, missingAngle);
+  assert.deepEqual(validAngle.smoothing.physicalConstraints, []);
+});
+
+test("QoC values do not affect the EV/LA probability result", () => {
+  const lookup = makeLocalLookup();
+  const weak = getResult(lookup, 95, 21, { qoc: "Weak" });
+  const barrel = getResult(lookup, 95, 21, { qoc: "Barrel" });
+
+  assert.strictEqual(weak, barrel);
+  assert.deepEqual(weak.probabilities, barrel.probabilities);
+});
+
+test("contact result code has no QoC probability fallback dependency", async () => {
+  const source = await readFile(
+    new URL("../services/contactResolutionService.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.doesNotMatch(source, /getHitTypeProbabilities/);
+  assert.doesNotMatch(source, /source:\s*["']qoc_fallback["']/);
 });
 
 test("contact resolution reports missing batted-ball and lookup states", () => {
@@ -214,20 +431,40 @@ test("contact resolution reports missing batted-ball and lookup states", () => {
   );
 });
 
-test("contact result code has no QoC probability fallback dependency", async () => {
-  const source = await readFile(
-    new URL("../services/contactResolutionService.js", import.meta.url),
-    "utf8"
-  );
+test("result and valid-cell caches are reused without mutating lookup", () => {
+  const sourceLookup = makeLocalLookup({ targetBattedBalls: 50 });
+  const original = structuredClone(sourceLookup);
+  let ownKeysCount = 0;
+  const lookup = new Proxy(sourceLookup, {
+    ownKeys(target) {
+      ownKeysCount += 1;
+      return Reflect.ownKeys(target);
+    },
+  });
 
-  assert.doesNotMatch(source, /getHitTypeProbabilities/);
-  assert.doesNotMatch(source, /qoc_fallback/);
+  const first = getResult(lookup, 95.2, 20.8);
+  const second = getResult(lookup, 95.4, 21.2);
+  getResult(lookup, 110, 70);
+
+  assert.strictEqual(second, first);
+  assert.equal(ownKeysCount, 1);
+  assert.deepEqual(sourceLookup, original);
 });
 
-test("lookup loader shares an in-flight request and reaches ready state", async () => {
+test("lookup validation reports parseable and valid cell counts", () => {
+  const lookup = makeLocalLookup();
+  lookup.invalid = {};
+  const result = validateEvLaLookup(lookup);
+
+  assert.equal(result.parseableCellCount, 6);
+  assert.equal(result.validCellCount, 6);
+});
+
+test("lookup loader shares one request and validates before ready", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCount = 0;
   let finishFetch;
+  const validLookup = { "95|21": makeRow({ battedBalls: 10, out: 10 }) };
 
   globalThis.fetch = () => {
     fetchCount += 1;
@@ -245,7 +482,7 @@ test("lookup loader shares an in-flight request and reaches ready state", async 
 
     assert.strictEqual(second, first);
     assert.equal(store.getEvLaLookupLoadState().status, "loading");
-    finishFetch({ ok: true, json: async () => ({ "95|21": {} }) });
+    finishFetch({ ok: true, json: async () => validLookup });
 
     const [firstLookup, secondLookup] = await Promise.all([first, second]);
     assert.strictEqual(firstLookup, secondLookup);
@@ -256,14 +493,17 @@ test("lookup loader shares an in-flight request and reaches ready state", async 
   }
 });
 
-test("lookup loader exposes an error state and can retry", async () => {
+test("lookup loader exposes invalid state and can retry", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCount = 0;
+  const validLookup = { "95|21": makeRow({ battedBalls: 10, out: 10 }) };
 
   globalThis.fetch = async () => {
     fetchCount += 1;
-    if (fetchCount === 1) return { ok: false, status: 503 };
-    return { ok: true, json: async () => ({ "95|21": {} }) };
+    return {
+      ok: true,
+      json: async () => (fetchCount === 1 ? {} : validLookup),
+    };
   };
 
   try {
@@ -273,7 +513,7 @@ test("lookup loader exposes an error state and can retry", async () => {
 
     await assert.rejects(
       store.loadEvLaLookup(),
-      (error) => error.code === "EV_LA_LOOKUP_LOAD_FAILED"
+      (error) => error.code === "EV_LA_LOOKUP_INVALID"
     );
     assert.equal(store.getEvLaLookupLoadState().status, "error");
 
@@ -333,7 +573,7 @@ function makeCompletedGame(awayTeam, homeTeam) {
   };
 }
 
-test("season simulation isolates one failed game and uses completed games for rates", () => {
+test("season simulation isolates one failed game and uses completed games", () => {
   const away = makeTeam("Away");
   const home = makeTeam("Home");
   let attempts = 0;

@@ -11,12 +11,32 @@ export const SMOOTHING_CONFIG = Object.freeze({
   priorStrength: 100,
   evBandwidth: 3,
   laBandwidth: 5,
-  minWeightedNeighborBattedBalls: 25,
-  searchRanges: Object.freeze([
-    Object.freeze({ evRadius: 3, laRadius: 5 }),
-    Object.freeze({ evRadius: 5, laRadius: 10 }),
-    Object.freeze({ evRadius: 10, laRadius: 20 }),
+  searchStages: Object.freeze([
+    Object.freeze({
+      mode: "local",
+      evRadius: 3,
+      laRadius: 5,
+      minEffectiveSampleSize: 50,
+      minNeighborCells: 5,
+    }),
+    Object.freeze({
+      mode: "expanded",
+      evRadius: 5,
+      laRadius: 10,
+      minEffectiveSampleSize: 100,
+      minNeighborCells: 5,
+    }),
+    Object.freeze({
+      mode: "expanded",
+      evRadius: 10,
+      laRadius: 20,
+      minEffectiveSampleSize: 100,
+      minNeighborCells: 5,
+    }),
   ]),
+  distantMinEffectiveSampleSize: 100,
+  distantMinNeighborCells: 5,
+  distantMaxNeighborCells: 50,
 });
 
 const RESULT_FIELDS = Object.freeze([
@@ -27,17 +47,7 @@ const RESULT_FIELDS = Object.freeze([
   { probability: "homeRun", count: "hrs", rate: "hrRate" },
 ]);
 
-const EMERGENCY_PROBABILITIES = Object.freeze({
-  out: 0.7,
-  single: 0.2,
-  double: 0.07,
-  triple: 0.005,
-  homeRun: 0.025,
-});
-
-const smoothingCache = new WeakMap();
-const emergencyWarningKeys = new WeakMap();
-const nonObjectEmergencyWarningKeys = new Set();
+const lookupCaches = new WeakMap();
 
 function makeEvBin(exitVelocity) {
   const ev = Number(exitVelocity);
@@ -77,292 +87,516 @@ function makeLegacyLaBin(launchAngle) {
   return `${lower}_${upper}`;
 }
 
-function toNonNegativeNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : 0;
+function createLookupInvalidError(message) {
+  const error = new Error(message);
+  error.code = "EV_LA_LOOKUP_INVALID";
+  return error;
 }
 
-function normalizeProbabilities(raw) {
-  const values = {};
-  let total = 0;
-
-  for (const field of RESULT_FIELDS) {
-    const value = toNonNegativeNumber(raw?.[field.probability]);
-    values[field.probability] = value;
-    total += value;
-  }
-
-  if (total <= 0) {
-    return { ...EMERGENCY_PROBABILITIES };
-  }
-
-  for (const field of RESULT_FIELDS) {
-    values[field.probability] /= total;
-  }
-
-  return values;
+function isLookupObject(lookup) {
+  return lookup !== null && typeof lookup === "object" && !Array.isArray(lookup);
 }
 
 function getBattedBallCount(row) {
-  return Math.max(0, Number(row?.battedBalls) || 0);
+  const count = Number(row?.battedBalls);
+  return Number.isFinite(count) && count > 0 ? count : 0;
 }
 
-function getOutcomeCounts(row) {
-  const battedBalls = getBattedBallCount(row);
-  const counts = {};
-  let rawTotal = 0;
+function normalizeProbabilityVector(raw) {
+  const probabilities = {};
+  let total = 0;
 
   for (const field of RESULT_FIELDS) {
-    const value = toNonNegativeNumber(row?.[field.count]);
-    counts[field.probability] = value;
-    rawTotal += value;
+    const value = Number(raw?.[field.probability]);
+    const safeValue = Number.isFinite(value) && value > 0 ? value : 0;
+    probabilities[field.probability] = safeValue;
+    total += safeValue;
   }
 
-  if (battedBalls > 0 && rawTotal > 0) {
-    return counts;
+  if (total <= 0) return null;
+
+  for (const field of RESULT_FIELDS) {
+    probabilities[field.probability] /= total;
   }
 
+  return probabilities;
+}
+
+function scaleCountsToBattedBalls(values, battedBalls) {
+  const total = Object.values(values).reduce((sum, value) => sum + value, 0);
+  if (total <= 0 || battedBalls <= 0) return null;
+
+  const counts = {};
   for (const field of RESULT_FIELDS) {
     counts[field.probability] =
-      toNonNegativeNumber(row?.[field.rate]) * battedBalls;
+      (values[field.probability] / total) * battedBalls;
   }
 
   return counts;
 }
 
-function parseEvLaKey(key) {
-  const [evText, laText] = String(key).split("|");
-  const ev = Number(evText);
-  const la = Number(laText);
+function readNonNegativeFields(row, propertyName) {
+  const values = {};
 
-  if (!Number.isFinite(ev) || !Number.isFinite(la)) {
-    return null;
+  for (const field of RESULT_FIELDS) {
+    const value = Number(row?.[field[propertyName]]);
+    if (!Number.isFinite(value) || value < 0) return null;
+    values[field.probability] = value;
   }
+
+  return values;
+}
+
+function getOutcomeCounts(row) {
+  const battedBalls = getBattedBallCount(row);
+  if (battedBalls <= 0) return null;
+
+  const rawCounts = readNonNegativeFields(row, "count");
+  const scaledRawCounts = rawCounts
+    ? scaleCountsToBattedBalls(rawCounts, battedBalls)
+    : null;
+  if (scaledRawCounts) return scaledRawCounts;
+
+  const rates = readNonNegativeFields(row, "rate");
+  return rates ? scaleCountsToBattedBalls(rates, battedBalls) : null;
+}
+
+function parseEvLaKey(key) {
+  const parts = String(key).split("|");
+  if (parts.length !== 2) return null;
+
+  const ev = Number(parts[0]);
+  const la = Number(parts[1]);
+  if (!Number.isFinite(ev) || !Number.isFinite(la)) return null;
 
   return { ev, la };
 }
 
-function getLookupRowByEvLa(lookup, ev, la) {
-  return lookup?.[`${ev}|${la}`] || null;
-}
-
-function gaussianWeight(evDistance, laDistance) {
-  const evScale = evDistance / SMOOTHING_CONFIG.evBandwidth;
-  const laScale = laDistance / SMOOTHING_CONFIG.laBandwidth;
-
-  return Math.exp(-0.5 * (evScale ** 2 + laScale ** 2));
-}
-
-function collectNeighbors({ lookup, targetEv, targetLa, range }) {
-  const weightedCounts = Object.fromEntries(
-    RESULT_FIELDS.map((field) => [field.probability, 0])
-  );
-  let neighborCount = 0;
-  let neighborBattedBalls = 0;
-  let weightedNeighborBattedBalls = 0;
-
-  const minEv = Math.max(EV_MIN, targetEv - range.evRadius);
-  const maxEv = Math.min(EV_MAX, targetEv + range.evRadius);
-  const minLa = Math.max(LA_MIN, targetLa - range.laRadius);
-  const maxLa = Math.min(LA_MAX, targetLa + range.laRadius);
-
-  for (let ev = minEv; ev <= maxEv; ev += 1) {
-    for (let la = minLa; la <= maxLa; la += 1) {
-      if (ev === targetEv && la === targetLa) continue;
-
-      const row = getLookupRowByEvLa(lookup, ev, la);
-      const battedBalls = getBattedBallCount(row);
-      if (battedBalls <= 0) continue;
-
-      const weight = gaussianWeight(
-        Math.abs(ev - targetEv),
-        Math.abs(la - targetLa)
-      );
-      if (weight <= 0) continue;
-
-      const counts = getOutcomeCounts(row);
-
-      for (const field of RESULT_FIELDS) {
-        weightedCounts[field.probability] +=
-          counts[field.probability] * weight;
-      }
-
-      neighborCount += 1;
-      neighborBattedBalls += battedBalls;
-      weightedNeighborBattedBalls += battedBalls * weight;
-    }
+function buildLookupCache(lookup) {
+  if (!isLookupObject(lookup)) {
+    throw createLookupInvalidError("EV/LA lookup must be a non-array object.");
   }
 
-  return {
-    weightedCounts,
-    neighborCount,
-    neighborBattedBalls,
-    weightedNeighborBattedBalls,
-    searchRange: { ...range },
-  };
-}
+  const entries = Object.entries(lookup);
+  if (entries.length === 0) {
+    throw createLookupInvalidError("EV/LA lookup is empty.");
+  }
 
-function findNeighborDistribution({ lookup, key }) {
-  const target = parseEvLaKey(key);
-  if (!target) return null;
+  const validCells = [];
+  let parseableCellCount = 0;
 
-  let candidate = null;
+  for (const [key, row] of entries) {
+    const parsed = parseEvLaKey(key);
+    if (!parsed) continue;
+    parseableCellCount += 1;
 
-  for (const range of SMOOTHING_CONFIG.searchRanges) {
-    candidate = collectNeighbors({
-      lookup,
-      targetEv: target.ev,
-      targetLa: target.la,
-      range,
+    const counts = getOutcomeCounts(row);
+    if (!counts) continue;
+
+    validCells.push({
+      key,
+      ev: parsed.ev,
+      la: parsed.la,
+      row,
+      counts,
+      battedBalls: getBattedBallCount(row),
     });
-
-    if (
-      candidate.weightedNeighborBattedBalls >=
-      SMOOTHING_CONFIG.minWeightedNeighborBattedBalls
-    ) {
-      break;
-    }
   }
 
-  if (!candidate || candidate.weightedNeighborBattedBalls <= 0) {
-    return candidate;
+  if (parseableCellCount === 0) {
+    throw createLookupInvalidError(
+      "EV/LA lookup has no parseable EV|LA keys."
+    );
+  }
+
+  if (validCells.length === 0) {
+    throw createLookupInvalidError(
+      "EV/LA lookup has no cells with a valid batted-ball distribution."
+    );
   }
 
   return {
-    ...candidate,
-    probabilities: normalizeProbabilities(candidate.weightedCounts),
+    resultCache: new Map(),
+    validCells,
+    parseableCellCount,
   };
 }
 
 function getLookupCache(lookup) {
-  if (!lookup || (typeof lookup !== "object" && typeof lookup !== "function")) {
-    return null;
+  if (!isLookupObject(lookup)) {
+    throw createLookupInvalidError("EV/LA lookup must be a non-array object.");
   }
 
-  let cache = smoothingCache.get(lookup);
+  let cache = lookupCaches.get(lookup);
   if (!cache) {
-    cache = new Map();
-    smoothingCache.set(lookup, cache);
+    cache = buildLookupCache(lookup);
+    lookupCaches.set(lookup, cache);
   }
 
   return cache;
 }
 
-function warnEmergencyFallbackOnce(lookup, key) {
-  let warningKeys = nonObjectEmergencyWarningKeys;
+export function validateEvLaLookup(lookup) {
+  const cache = getLookupCache(lookup);
 
-  if (lookup && (typeof lookup === "object" || typeof lookup === "function")) {
-    warningKeys = emergencyWarningKeys.get(lookup);
-    if (!warningKeys) {
-      warningKeys = new Set();
-      emergencyWarningKeys.set(lookup, warningKeys);
+  return {
+    parseableCellCount: cache.parseableCellCount,
+    validCellCount: cache.validCells.length,
+  };
+}
+
+function distanceSquared(targetEv, targetLa, ev, la) {
+  const evDistance = Math.abs(ev - targetEv);
+  const laDistance = Math.abs(la - targetLa);
+  const evScale = evDistance / SMOOTHING_CONFIG.evBandwidth;
+  const laScale = laDistance / SMOOTHING_CONFIG.laBandwidth;
+
+  return {
+    distanceSquared: evScale ** 2 + laScale ** 2,
+    evDistance,
+    laDistance,
+  };
+}
+
+function gaussianWeight(value) {
+  return Math.exp(-0.5 * value);
+}
+
+function createNeighborAccumulator(metadata) {
+  return {
+    ...metadata,
+    weightedCounts: Object.fromEntries(
+      RESULT_FIELDS.map((field) => [field.probability, 0])
+    ),
+    neighborCount: 0,
+    neighborBattedBalls: 0,
+    weightedNeighborBattedBalls: 0,
+    sumSquaredWeightedSamples: 0,
+  };
+}
+
+function addNeighbor(accumulator, cell, weight) {
+  if (!cell || !cell.counts || weight <= 0 || !Number.isFinite(weight)) {
+    return;
+  }
+
+  for (const field of RESULT_FIELDS) {
+    accumulator.weightedCounts[field.probability] +=
+      cell.counts[field.probability] * weight;
+  }
+
+  accumulator.neighborCount += 1;
+  accumulator.neighborBattedBalls += cell.battedBalls;
+  accumulator.weightedNeighborBattedBalls += cell.battedBalls * weight;
+  accumulator.sumSquaredWeightedSamples +=
+    cell.battedBalls * weight ** 2;
+}
+
+function calculateEffectiveSampleSize(accumulator) {
+  const sumWeightedSamples = accumulator.weightedNeighborBattedBalls;
+  const denominator = accumulator.sumSquaredWeightedSamples;
+
+  if (sumWeightedSamples <= 0 || denominator <= 0) return 0;
+  return (sumWeightedSamples ** 2) / denominator;
+}
+
+function finalizeNeighbors(accumulator) {
+  const neighborEffectiveSampleSize =
+    calculateEffectiveSampleSize(accumulator);
+  const probabilities = normalizeProbabilityVector(
+    accumulator.weightedCounts
+  );
+
+  return {
+    ...accumulator,
+    neighborEffectiveSampleSize,
+    probabilities,
+  };
+}
+
+function isSearchStageSatisfied(neighbors, stage) {
+  return (
+    neighbors.neighborCount >= stage.minNeighborCells &&
+    neighbors.neighborEffectiveSampleSize >= stage.minEffectiveSampleSize
+  );
+}
+
+function collectRangeNeighbors({ lookup, targetEv, targetLa, stage, stageIndex }) {
+  const accumulator = createNeighborAccumulator({
+    neighborMode: stage.mode,
+    expansionLevel: stageIndex,
+    searchRange: {
+      evRadius: stage.evRadius,
+      laRadius: stage.laRadius,
+    },
+    nearestDistanceSquared: null,
+    nearestEvDistance: null,
+    nearestLaDistance: null,
+  });
+
+  const minEv = Math.max(EV_MIN, targetEv - stage.evRadius);
+  const maxEv = Math.min(EV_MAX, targetEv + stage.evRadius);
+  const minLa = Math.max(LA_MIN, targetLa - stage.laRadius);
+  const maxLa = Math.min(LA_MAX, targetLa + stage.laRadius);
+
+  for (let ev = minEv; ev <= maxEv; ev += 1) {
+    for (let la = minLa; la <= maxLa; la += 1) {
+      if (ev === targetEv && la === targetLa) continue;
+
+      const key = `${ev}|${la}`;
+      const row = lookup[key];
+      const counts = getOutcomeCounts(row);
+      if (!counts) continue;
+
+      const distance = distanceSquared(targetEv, targetLa, ev, la);
+      addNeighbor(
+        accumulator,
+        {
+          key,
+          ev,
+          la,
+          row,
+          counts,
+          battedBalls: getBattedBallCount(row),
+        },
+        gaussianWeight(distance.distanceSquared)
+      );
     }
   }
 
-  if (warningKeys.has(key)) return;
-  warningKeys.add(key);
-  console.warn(
-    `EV/LA emergency fallback used for ${key}: no target or neighbor samples.`
-  );
+  return finalizeNeighbors(accumulator);
+}
+
+function insertNearestCell(cells, candidate, maxCells) {
+  let insertAt = cells.length;
+
+  for (let index = 0; index < cells.length; index += 1) {
+    const current = cells[index];
+    if (
+      candidate.distanceSquared < current.distanceSquared ||
+      (candidate.distanceSquared === current.distanceSquared &&
+        candidate.cell.key < current.cell.key)
+    ) {
+      insertAt = index;
+      break;
+    }
+  }
+
+  if (insertAt >= maxCells && cells.length >= maxCells) return;
+  cells.splice(insertAt, 0, candidate);
+  if (cells.length > maxCells) cells.pop();
+}
+
+function collectDistantNeighbors({ cache, targetEv, targetLa, targetKey }) {
+  const nearestCells = [];
+
+  for (const cell of cache.validCells) {
+    if (cell.key === targetKey) continue;
+
+    const distance = distanceSquared(targetEv, targetLa, cell.ev, cell.la);
+    insertNearestCell(
+      nearestCells,
+      { cell, ...distance },
+      SMOOTHING_CONFIG.distantMaxNeighborCells
+    );
+  }
+
+  const nearest = nearestCells[0] || null;
+  const accumulator = createNeighborAccumulator({
+    neighborMode: "distant",
+    expansionLevel: SMOOTHING_CONFIG.searchStages.length,
+    searchRange: null,
+    nearestDistanceSquared: nearest?.distanceSquared ?? null,
+    nearestEvDistance: nearest?.evDistance ?? null,
+    nearestLaDistance: nearest?.laDistance ?? null,
+  });
+
+  for (const candidate of nearestCells) {
+    const relativeDistanceSquared =
+      candidate.distanceSquared - nearest.distanceSquared;
+    addNeighbor(
+      accumulator,
+      candidate.cell,
+      gaussianWeight(relativeDistanceSquared)
+    );
+
+    const effectiveSampleSize = calculateEffectiveSampleSize(accumulator);
+    if (
+      accumulator.neighborCount >=
+        SMOOTHING_CONFIG.distantMinNeighborCells &&
+      effectiveSampleSize >=
+        SMOOTHING_CONFIG.distantMinEffectiveSampleSize
+    ) {
+      break;
+    }
+  }
+
+  return finalizeNeighbors(accumulator);
+}
+
+function findNeighborDistribution({ lookup, cache, key }) {
+  const target = parseEvLaKey(key);
+  if (!target) {
+    throw createLookupInvalidError(`Invalid EV/LA target key: ${key}`);
+  }
+
+  for (
+    let stageIndex = 0;
+    stageIndex < SMOOTHING_CONFIG.searchStages.length;
+    stageIndex += 1
+  ) {
+    const stage = SMOOTHING_CONFIG.searchStages[stageIndex];
+    const neighbors = collectRangeNeighbors({
+      lookup,
+      targetEv: target.ev,
+      targetLa: target.la,
+      stage,
+      stageIndex,
+    });
+
+    if (isSearchStageSatisfied(neighbors, stage)) return neighbors;
+  }
+
+  return collectDistantNeighbors({
+    cache,
+    targetEv: target.ev,
+    targetLa: target.la,
+    targetKey: key,
+  });
+}
+
+function applyPhysicalConstraints(probabilities, launchAngle) {
+  const normalized = normalizeProbabilityVector(probabilities);
+  if (!normalized) {
+    throw createLookupInvalidError(
+      "EV/LA outcome distribution could not be normalized."
+    );
+  }
+
+  const physicalConstraints = [];
+  if (!(Number(launchAngle) < 0)) {
+    return { probabilities: normalized, physicalConstraints };
+  }
+
+  physicalConstraints.push("negative_launch_angle_no_direct_home_run");
+  normalized.homeRun = 0;
+
+  const remainingTotal =
+    normalized.out +
+    normalized.single +
+    normalized.double +
+    normalized.triple;
+
+  if (remainingTotal <= 0) {
+    return {
+      probabilities: {
+        out: 1,
+        single: 0,
+        double: 0,
+        triple: 0,
+        homeRun: 0,
+      },
+      physicalConstraints,
+    };
+  }
+
+  normalized.out /= remainingTotal;
+  normalized.single /= remainingTotal;
+  normalized.double /= remainingTotal;
+  normalized.triple /= remainingTotal;
+
+  return { probabilities: normalized, physicalConstraints };
 }
 
 function createSmoothingDetails({
   targetBattedBalls,
   neighbors,
   effectivePriorStrength,
-  applied,
+  targetWeight,
+  physicalConstraints,
 }) {
-  const configuredPrior = SMOOTHING_CONFIG.priorStrength;
-  const reliability =
+  const configuredPriorStrength = SMOOTHING_CONFIG.priorStrength;
+  const configuredReliability =
     targetBattedBalls > 0
-      ? targetBattedBalls / (targetBattedBalls + configuredPrior)
-      : 0;
-  const effectiveReliability =
-    targetBattedBalls + effectivePriorStrength > 0
       ? targetBattedBalls /
-        (targetBattedBalls + effectivePriorStrength)
+        (targetBattedBalls + configuredPriorStrength)
       : 0;
 
   return {
-    applied,
+    applied: Boolean(neighbors?.probabilities && effectivePriorStrength > 0),
     targetBattedBalls,
+    neighborMode: neighbors?.neighborMode || null,
+    expansionLevel: neighbors?.expansionLevel ?? null,
+    searchRange: neighbors?.searchRange || null,
     neighborCount: neighbors?.neighborCount || 0,
     neighborBattedBalls: neighbors?.neighborBattedBalls || 0,
     weightedNeighborBattedBalls:
       neighbors?.weightedNeighborBattedBalls || 0,
+    neighborEffectiveSampleSize:
+      neighbors?.neighborEffectiveSampleSize || 0,
+    configuredPriorStrength,
     effectivePriorStrength,
-    reliability,
-    effectiveReliability,
-    searchRange: neighbors?.searchRange || null,
+    configuredReliability,
+    targetWeight,
+    nearestDistanceSquared: neighbors?.nearestDistanceSquared ?? null,
+    nearestEvDistance: neighbors?.nearestEvDistance ?? null,
+    nearestLaDistance: neighbors?.nearestLaDistance ?? null,
+    physicalConstraints,
+    reliability: configuredReliability,
+    effectiveReliability: targetWeight,
   };
 }
 
-function createEmergencyOutcome({ lookup, key, row, neighbors }) {
-  warnEmergencyFallbackOnce(lookup, key);
-
-  return {
-    key,
-    source: "ev_la_emergency_fallback",
-    sampleQuality: row?.sampleQuality || "none",
-    probabilities: normalizeProbabilities(EMERGENCY_PROBABILITIES),
-    row: row || null,
-    smoothing: createSmoothingDetails({
-      targetBattedBalls: 0,
-      neighbors,
-      effectivePriorStrength: 0,
-      applied: false,
-    }),
-    neighborCount: neighbors?.neighborCount || 0,
-    neighborBattedBalls: neighbors?.neighborBattedBalls || 0,
-  };
-}
-
-function calculateSmoothedOutcome({ lookup, key, row }) {
-  const targetBattedBalls = getBattedBallCount(row);
+function calculateSmoothedOutcome({ lookup, cache, key, row, launchAngle }) {
   const targetCounts = getOutcomeCounts(row);
-  const neighbors = findNeighborDistribution({ lookup, key });
-  const weightedNeighborBattedBalls =
-    neighbors?.weightedNeighborBattedBalls || 0;
+  const targetBattedBalls = targetCounts ? getBattedBallCount(row) : 0;
+  const neighbors = findNeighborDistribution({ lookup, cache, key });
+  const hasNeighborDistribution = Boolean(neighbors?.probabilities);
 
-  if (targetBattedBalls <= 0 && weightedNeighborBattedBalls <= 0) {
-    return createEmergencyOutcome({ lookup, key, row, neighbors });
+  if (targetBattedBalls <= 0 && !hasNeighborDistribution) {
+    throw createLookupInvalidError(
+      `No valid target or neighbor distribution is available for ${key}.`
+    );
   }
 
-  const effectivePriorStrength = Math.min(
-    SMOOTHING_CONFIG.priorStrength,
-    weightedNeighborBattedBalls
-  );
-  const smoothingApplied = effectivePriorStrength > 0;
+  const effectivePriorStrength = hasNeighborDistribution
+    ? Math.min(
+        SMOOTHING_CONFIG.priorStrength,
+        neighbors.neighborEffectiveSampleSize
+      )
+    : 0;
+  const denominator = targetBattedBalls + effectivePriorStrength;
+  const targetWeight = denominator > 0 ? targetBattedBalls / denominator : 0;
   let probabilities;
   let source;
 
   if (targetBattedBalls <= 0) {
     probabilities = neighbors.probabilities;
     source = "ev_la_neighbor";
-  } else if (!smoothingApplied) {
-    probabilities = normalizeProbabilities(targetCounts);
+  } else if (!hasNeighborDistribution || effectivePriorStrength <= 0) {
+    probabilities = normalizeProbabilityVector(targetCounts);
     source = "ev_la_smoothed";
   } else {
-    const denominator = targetBattedBalls + effectivePriorStrength;
     const smoothedCounts = {};
 
     for (const field of RESULT_FIELDS) {
       smoothedCounts[field.probability] =
-        (targetCounts[field.probability] +
-          neighbors.probabilities[field.probability] *
-            effectivePriorStrength) /
-        denominator;
+        targetCounts[field.probability] +
+        neighbors.probabilities[field.probability] *
+          effectivePriorStrength;
     }
 
-    probabilities = normalizeProbabilities(smoothedCounts);
+    probabilities = normalizeProbabilityVector(smoothedCounts);
     source = "ev_la_smoothed";
   }
 
+  const constrained = applyPhysicalConstraints(probabilities, launchAngle);
   const smoothing = createSmoothingDetails({
     targetBattedBalls,
     neighbors,
     effectivePriorStrength,
-    applied: smoothingApplied,
+    targetWeight,
+    physicalConstraints: constrained.physicalConstraints,
   });
 
   return {
@@ -370,7 +604,7 @@ function calculateSmoothedOutcome({ lookup, key, row }) {
     source,
     sampleQuality:
       row?.sampleQuality || (targetBattedBalls > 0 ? "unknown" : "none"),
-    probabilities,
+    probabilities: constrained.probabilities,
     row: row || null,
     smoothing,
     neighborCount: smoothing.neighborCount,
@@ -391,15 +625,22 @@ export function getEvLaOutcomeProbabilities({
   launchAngle,
   lookup,
 }) {
-  const key = getEvLaKey(exitVelocity, launchAngle);
   const cache = getLookupCache(lookup);
-  const cached = cache?.get(key);
+  const key = getEvLaKey(exitVelocity, launchAngle);
+  const constraintKey = Number(launchAngle) < 0 ? "negative" : "nonnegative";
+  const resultCacheKey = `${key}|${constraintKey}`;
+  const cached = cache.resultCache.get(resultCacheKey);
   if (cached) return cached;
 
-  const legacyKey = getLegacyEvLaKey(exitVelocity, launchAngle);
-  const row = lookup?.[key] || lookup?.[legacyKey] || null;
-  const result = calculateSmoothedOutcome({ lookup, key, row });
+  const row = lookup[key] || null;
+  const result = calculateSmoothedOutcome({
+    lookup,
+    cache,
+    key,
+    row,
+    launchAngle,
+  });
 
-  cache?.set(key, result);
+  cache.resultCache.set(resultCacheKey, result);
   return result;
 }

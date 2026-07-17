@@ -45,6 +45,9 @@ test("a normal visible game completes with EV/LA smoothing in fair-ball logs", (
     )
   );
   assert.ok(fairBallLogs.every((line) => !line.includes("qoc_fallback")));
+  assert.ok(
+    fairBallLogs.every((line) => !line.includes("ev_la_emergency_fallback"))
+  );
 });
 
 for (const gameCount of [10, 162]) {

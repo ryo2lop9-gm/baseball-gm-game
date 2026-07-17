@@ -58,10 +58,10 @@ function findById(root, id) {
   return null;
 }
 
-test("app startup disables controls until lookup load and exposes retry on failure", async () => {
+test("app startup blocks controls and exposes retry for an invalid lookup", async () => {
   const appShell = new FakeElement("div");
   const gameButton = new FakeElement("button");
-  let rejectFetch;
+  let finishFetch;
 
   globalThis.document = {
     body: appShell,
@@ -71,8 +71,8 @@ test("app startup disables controls until lookup load and exposes retry on failu
     createElement: (tagName) => new FakeElement(tagName),
   };
   globalThis.fetch = () =>
-    new Promise((resolve, reject) => {
-      rejectFetch = reject;
+    new Promise((resolve) => {
+      finishFetch = resolve;
     });
 
   const { bootstrapApp } = await import(
@@ -86,10 +86,10 @@ test("app startup disables controls until lookup load and exposes retry on failu
   assert.equal(loadingStatus.attributes.role, "status");
   assert.match(loadingStatus.children[0].textContent, /読み込んでいます/);
 
-  rejectFetch(new Error("Injected lookup failure"));
+  finishFetch({ ok: true, json: async () => ({}) });
   await assert.rejects(
     startup,
-    (error) => error.code === "EV_LA_LOOKUP_LOAD_FAILED"
+    (error) => error.code === "EV_LA_LOOKUP_INVALID"
   );
 
   const errorStatus = document.getElementById("evLaLookupStartupStatus");

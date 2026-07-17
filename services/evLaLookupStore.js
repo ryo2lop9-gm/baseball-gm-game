@@ -1,3 +1,5 @@
+import { validateEvLaLookup } from "./evLaOutcomeService.js";
+
 let evLaLookup = null;
 let loadPromise = null;
 let loadStatus = "idle";
@@ -27,9 +29,7 @@ export function loadEvLaLookup() {
       return response.json();
     })
     .then((lookup) => {
-      if (!lookup || typeof lookup !== "object" || Array.isArray(lookup)) {
-        throw createLookupLoadError("EV/LA lookup has an invalid format.");
-      }
+      validateEvLaLookup(lookup);
 
       evLaLookup = lookup;
       loadStatus = "ready";
@@ -39,7 +39,8 @@ export function loadEvLaLookup() {
     .catch((error) => {
       loadStatus = "error";
       loadError =
-        error?.code === "EV_LA_LOOKUP_LOAD_FAILED"
+        error?.code === "EV_LA_LOOKUP_LOAD_FAILED" ||
+        error?.code === "EV_LA_LOOKUP_INVALID"
           ? error
           : createLookupLoadError("EV/LA lookup load failed.", error);
       loadPromise = null;
