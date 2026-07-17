@@ -289,6 +289,26 @@ test("no fixed emergency fallback source remains", async () => {
   assert.doesNotMatch(source, /EMERGENCY_PROBABILITIES/);
 });
 
+test("Run Lookup click does not pass MouseEvent as the lookup", async () => {
+  const source = await readFile(
+    new URL("../test_ev_la_interpolation.html", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(
+    source,
+    /runButton\.addEventListener\(\s*["']click["']\s*,\s*\(\)\s*=>\s*runFromInputs\(\)\s*\)/
+  );
+  assert.doesNotMatch(
+    source,
+    /runButton\.addEventListener\(\s*["']click["']\s*,\s*runFromInputs\s*\)/
+  );
+  assert.match(
+    source,
+    /runFromInputs\(preset\.useEmptyLookup\s*\?\s*\{\s*invalid:\s*true\s*\}\s*:\s*lookup\)/
+  );
+});
+
 test("extreme real EV/LA cells no longer share a fixed distribution", async () => {
   const lookup = await loadRealLookup();
   const low = getResult(lookup, 52, -80);

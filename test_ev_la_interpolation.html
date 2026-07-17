@@ -233,12 +233,12 @@
       button.addEventListener("click", () => {
         exitVelocityInput.value = preset.exitVelocity;
         launchAngleInput.value = preset.launchAngle;
-        runFromInputs(preset.useEmptyLookup ? {} : lookup);
+        runFromInputs(preset.useEmptyLookup ? { invalid: true } : lookup);
       });
       presetButtons.append(button);
     }
 
-    runButton.addEventListener("click", runFromInputs);
+    runButton.addEventListener("click", () => runFromInputs());
 
     runFromInputs();
   </script>
