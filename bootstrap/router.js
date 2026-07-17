@@ -1,4 +1,4 @@
-import { applyRouteVisibility, wireRouteEvents } from "./appRouter.js?v=codex10-1";
+import { applyRouteVisibility, wireRouteEvents } from "./appRouter.js?v=codex10-2";
 
 export function createPageRouter({
   routeDom,

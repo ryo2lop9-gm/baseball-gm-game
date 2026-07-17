@@ -214,7 +214,7 @@ function normalizePitchType(value, diagnostics) {
 }
 
 function normalizeCourse(event, diagnostics) {
-  const value = event.isStrike ? event.course : "Ball";
+  const value = event.course;
   if (COURSES.has(value)) return value;
   diagnostics.unknownCourseCount += 1;
   return "unknown";
@@ -784,7 +784,7 @@ function finalizeBattedProfile(raw) {
     LDPct: safeDivide(raw.LD, raw.BIP),
     FBPct: safeDivide(raw.FB, raw.BIP),
     PUPct: safeDivide(raw.PU, raw.BIP),
-    AIRPct: safeDivide(raw.FB + raw.PU, raw.BIP),
+    AIRPct: safeDivide(raw.LD + raw.FB + raw.PU, raw.BIP),
     homeRunPerFlyBall: safeDivide(raw.homeRun, raw.FB),
     hardHitPct: safeDivide(raw.hardHit, raw.BIP),
     sweetSpotPct: safeDivide(raw.sweetSpot, raw.BIP),
@@ -896,6 +896,11 @@ function finalizePlayers(players) {
           zSwingPct: pitch.zSwingPct,
           chasePct: pitch.chasePct,
           contactPct: pitch.contactPct,
+          zoneContactPct: pitch.zoneContactPct,
+          chaseContactPct: pitch.chaseContactPct,
+          pitchesPerPA: pitch.pitchesPerPA,
+          calledStrikePct: pitch.calledStrikePct,
+          cswPct: pitch.cswPct,
           whiffPct: pitch.whiffPct,
           BIP: batted.BIP,
           averageExitVelocity: batted.averageExitVelocity,
@@ -1041,9 +1046,37 @@ function calculateInvariantDiagnostics(advanced, results, qoc, battedBallMetrics
   diagnostics.battedBallInvariantMismatchCount +=
     countInvariant(outcomeTotal === combinedProfile.BIP) +
     countInvariant(
+      combinedProfile.GB + combinedProfile.LD + combinedProfile.FB + combinedProfile.PU ===
+        combinedProfile.BIP
+    ) +
+    countInvariant(
       Object.values(qoc.combined || {}).reduce((sum, value) => sum + value.count, 0) ===
         battedBallMetrics.fairBattedBalls
     );
+  const coursePitchTotal = SIDES.reduce(
+    (sum, side) =>
+      sum + MEASUREMENT_COURSES.reduce(
+        (courseSum, course) => courseSum + advanced.course[side][course][PITCH.pitches],
+        0
+      ),
+    0
+  );
+  const courseBattedBallTotal = SIDES.reduce(
+    (sum, side) =>
+      sum + MEASUREMENT_COURSES.reduce(
+        (courseSum, course) => courseSum + advanced.course[side][course].batted.BIP,
+        0
+      ),
+    0
+  );
+  diagnostics.pitchInvariantMismatchCount += countInvariant(
+    coursePitchTotal ===
+      advanced.pitchBySide.away[PITCH.pitches] +
+        advanced.pitchBySide.home[PITCH.pitches]
+  );
+  diagnostics.battedBallInvariantMismatchCount += countInvariant(
+    courseBattedBallTotal === battedBallMetrics.fairBattedBalls
+  );
   for (const group of ["source", "sampleQuality", "neighborMode", "expansionLevel"]) {
     const total = SIDES.reduce(
       (sum, side) =>

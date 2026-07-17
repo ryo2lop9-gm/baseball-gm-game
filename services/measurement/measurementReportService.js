@@ -148,7 +148,11 @@ export function getMeasurementDefinitions() {
       BABIP: "(H - HR) / (AB - K - HR)",
       BBPct: "BB / PA",
       KPct: "K / PA",
+      BBPerK: "BB / K",
+      pitchesPerPA: "all pitches / PA",
       zonePct: "zone pitches / all pitches",
+      resultStrikePct:
+        "called strikes, swinging strikes, fouls, and fair balls in play / all pitches",
       swingPct: "swings / all pitches",
       zSwingPct: "zone swings / zone pitches",
       chasePct: "out-of-zone swings / out-of-zone pitches",
@@ -156,6 +160,7 @@ export function getMeasurementDefinitions() {
       zoneContactPct: "zone contacts / zone swings",
       chaseContactPct: "out-of-zone contacts / out-of-zone swings",
       whiffPct: "whiffs / swings",
+      calledBallPct: "called balls / all pitches",
       cswPct: "(called strikes + whiffs) / all pitches",
       firstPitchStrikePct: "result strikes on 0-0 pitches / 0-0 pitches",
     },
@@ -163,12 +168,16 @@ export function getMeasurementDefinitions() {
       "Every pitch is attached to its pre-pitch count. A terminal pitch also receives the PA outcome.",
     pitchResultStrike:
       "Called strikes, swinging strikes, fouls, and fair balls in play count as result strikes.",
+    courseBreakdown:
+      "Course Breakdown uses the resolved course passed to EV/LA generation and pitch probabilities: A, B, C, Ball, or unknown.",
+    zoneClassification:
+      "Zone% uses isStrike. Course and the zone decision are separate concepts, so an out-of-zone pitch may retain course A/B/C and a zone pitch may retain course Ball.",
     battedBallClasses: {
       GB: "launch angle < 10 degrees",
       LD: "10 <= launch angle < 25 degrees",
       FB: "25 <= launch angle < 50 degrees",
       PU: "launch angle >= 50 degrees",
-      AIR: "FB + PU",
+      AIR: "LD + FB + PU",
       hardHit: "exit velocity >= 95 mph",
       sweetSpot: "8 <= launch angle <= 32 degrees",
     },
@@ -322,6 +331,7 @@ function resultTable(results) {
     ["RBI", "RBI"], ["TB", "totalBases"], ["AVG", "AVG"], ["OBP", "OBP"],
     ["SLG", "SLG"], ["OPS", "OPS"], ["ISO", "ISO"], ["BABIP", "BABIP"],
     ["BB%", "BBPct", true], ["K%", "KPct", true], ["HR%", "HRPct", true],
+    ["BB/K", "BBPerK"],
     ["XBH/H", "XBHPerH", true],
   ];
   return [
@@ -350,11 +360,13 @@ function distributionTable(title, distribution) {
 
 function plateDisciplineTable(data) {
   const rows = [
-    ["Pitches", "pitches"], ["PA", "PA"], ["Zone%", "zonePct", true],
+    ["Pitches", "pitches"], ["PA", "PA"], ["Pitches/PA", "pitchesPerPA"],
+    ["Zone%", "zonePct", true], ["Result Strike%", "resultStrikePct", true],
     ["Swing%", "swingPct", true], ["Z-Swing%", "zSwingPct", true],
     ["Chase%", "chasePct", true], ["Contact%", "contactPct", true],
     ["Z-Contact%", "zoneContactPct", true], ["Chase Contact%", "chaseContactPct", true],
     ["Whiff%", "whiffPct", true], ["Called Strike%", "calledStrikePct", true],
+    ["Called Ball%", "calledBallPct", true],
     ["Foul%", "foulPct", true], ["BIP/Pitch", "bipPerPitch", true],
     ["CSW%", "cswPct", true], ["First-pitch Strike%", "firstPitchStrikePct", true],
   ];
@@ -404,14 +416,38 @@ function groupedPitchTable(title, group) {
   ];
 }
 
+function countBreakdownTable(group) {
+  return [
+    "## Count Breakdown",
+    "",
+    "| Count | Pitches | Zone% | Swing% | Chase% | Contact% | Whiff% | CSW% | BIP | PA | BB | K | HR | AVG | OBP | SLG | OPS |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(group?.combined || {}).map(([key, value]) =>
+      `| ${mdCell(key)} | ${value.pitches || 0} | ${formatPct(value.zonePct)} | ${formatPct(value.swingPct)} | ${formatPct(value.chasePct)} | ${formatPct(value.contactPct)} | ${formatPct(value.whiffPct)} | ${formatPct(value.cswPct)} | ${value.fairBattedBalls || 0} | ${value.PA || 0} | ${value.BB || 0} | ${value.K || 0} | ${value.HR || 0} | ${formatNumber(value.AVG)} | ${formatNumber(value.OBP)} | ${formatNumber(value.SLG)} | ${formatNumber(value.OPS)} |`
+    ),
+  ];
+}
+
 function groupedPitchTypeTable(group) {
   return [
     "## Pitch Type Breakdown",
     "",
-    "| Pitch Type | Pitches | Usage% | Zone% | Swing% | Chase% | Contact% | Whiff% | PA | AVG | SLG |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    "| Pitch Type | Pitches | Usage% | Zone% | Swing% | Chase% | Contact% | Whiff% | PA | AB | H | HR | BB | K | AVG | SLG |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...Object.entries(group?.combined || {}).map(([key, value]) =>
-      `| ${mdCell(key)} | ${value.pitches || 0} | ${formatPct(value.usagePct)} | ${formatPct(value.zonePct)} | ${formatPct(value.swingPct)} | ${formatPct(value.chasePct)} | ${formatPct(value.contactPct)} | ${formatPct(value.whiffPct)} | ${value.PA || 0} | ${formatNumber(value.AVG)} | ${formatNumber(value.SLG)} |`
+      `| ${mdCell(key)} | ${value.pitches || 0} | ${formatPct(value.usagePct)} | ${formatPct(value.zonePct)} | ${formatPct(value.swingPct)} | ${formatPct(value.chasePct)} | ${formatPct(value.contactPct)} | ${formatPct(value.whiffPct)} | ${value.PA || 0} | ${value.AB || 0} | ${value.H || 0} | ${value.HR || 0} | ${value.BB || 0} | ${value.K || 0} | ${formatNumber(value.AVG)} | ${formatNumber(value.SLG)} |`
+    ),
+  ];
+}
+
+function velocityBandBreakdownTable(group) {
+  return [
+    "## Velocity Band Breakdown",
+    "",
+    "| Velocity Band | Pitches | Zone% | Swing% | Chase% | Contact% | Whiff% | PA | AB | H | 2B | 3B | HR | BB | K | AVG | OBP | SLG | OPS |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(group?.combined || {}).map(([key, value]) =>
+      `| ${mdCell(key)} | ${value.pitches || 0} | ${formatPct(value.zonePct)} | ${formatPct(value.swingPct)} | ${formatPct(value.chasePct)} | ${formatPct(value.contactPct)} | ${formatPct(value.whiffPct)} | ${value.PA || 0} | ${value.AB || 0} | ${value.H || 0} | ${value.doubles || 0} | ${value.triples || 0} | ${value.HR || 0} | ${value.BB || 0} | ${value.K || 0} | ${formatNumber(value.AVG)} | ${formatNumber(value.OBP)} | ${formatNumber(value.SLG)} | ${formatNumber(value.OPS)} |`
     ),
   ];
 }
@@ -452,10 +488,20 @@ function smoothingPercentileTable(data) {
 
 function playerTable(players) {
   return [
+    "### Player Batting",
+    "",
     "| Side | # | Player | PA | AVG | OBP | SLG | OPS | HR | BB% | K% | Avg EV | HardHit% |",
     "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...["away", "home"].flatMap((side) => (players?.[side] || []).map((player) =>
       `| ${side} | ${player.lineupOrder} | ${mdCell(player.name)} | ${player.PA} | ${formatNumber(player.AVG)} | ${formatNumber(player.OBP)} | ${formatNumber(player.SLG)} | ${formatNumber(player.OPS)} | ${player.HR} | ${formatPct(player.BBPct)} | ${formatPct(player.KPct)} | ${formatNumber(player.averageExitVelocity, 2)} | ${formatPct(player.hardHitPct)} |`
+    )),
+    "",
+    "### Player Plate Discipline",
+    "",
+    "| Side | # | Player | Pitches/PA | Swing% | Z-Swing% | Chase% | Contact% | Zone Contact% | Chase Contact% | Whiff% | Called Strike% | CSW% |",
+    "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...["away", "home"].flatMap((side) => (players?.[side] || []).map((player) =>
+      `| ${side} | ${player.lineupOrder} | ${mdCell(player.name)} | ${formatNumber(player.pitchesPerPA, 2)} | ${formatPct(player.swingPct)} | ${formatPct(player.zSwingPct)} | ${formatPct(player.chasePct)} | ${formatPct(player.contactPct)} | ${formatPct(player.zoneContactPct)} | ${formatPct(player.chaseContactPct)} | ${formatPct(player.whiffPct)} | ${formatPct(player.calledStrikePct)} | ${formatPct(player.cswPct)} |`
     )),
   ];
 }
@@ -492,7 +538,7 @@ export function buildMeasurementMarkdown(options) {
   const {
     run, teams, engineConfig, results, battedBallMetrics, diagnostics,
     plateDiscipline, battedBallProfiles, breakdowns, smoothingDiagnostics,
-    players, pitchers, gameDistribution, modelLimitations,
+    players, pitchers, gameDistribution, definitions, modelLimitations,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -546,11 +592,11 @@ export function buildMeasurementMarkdown(options) {
     `- averageTargetBattedBalls: ${formatNumber(battedBallMetrics.averageTargetBattedBalls, 3)}`,
     `- averageNeighborESS: ${formatNumber(battedBallMetrics.averageNeighborEffectiveSampleSize, 3)}`,
     "",
-    ...groupedPitchTable("Count Breakdown", breakdowns.count),
+    ...countBreakdownTable(breakdowns.count),
     "",
     ...groupedPitchTypeTable(breakdowns.pitchType),
     "",
-    ...groupedPitchTable("Velocity Band Breakdown", breakdowns.velocityBand),
+    ...velocityBandBreakdownTable(breakdowns.velocityBand),
     "",
     ...groupedCourseTable(breakdowns.course),
     "",
@@ -573,6 +619,8 @@ export function buildMeasurementMarkdown(options) {
     ...groupedBattedTable("Sample Quality Outcome Breakdown", breakdowns.sampleQuality),
     "",
     ...groupedBattedTable("Neighbor Mode Outcome Breakdown", breakdowns.neighborMode),
+    "",
+    ...groupedBattedTable("Expansion Level Outcome Breakdown", breakdowns.expansionLevel),
     "",
     "## Neighbor Mode別結果",
     "",
@@ -617,6 +665,12 @@ export function buildMeasurementMarkdown(options) {
       ({ metric, reason }) => `- ${metric}: ${reason}`
     ),
     ...modelLimitations.interpretationNotes.map((note) => `- Note: ${note}`),
+    "",
+    "## Definitions",
+    "",
+    `- Course Breakdown: ${definitions.courseBreakdown}`,
+    `- Zone classification: ${definitions.zoneClassification}`,
+    `- AIR: ${definitions.battedBallClasses.AIR}`,
     "",
     "## AIへの確認依頼 / AI Review Request",
     "",

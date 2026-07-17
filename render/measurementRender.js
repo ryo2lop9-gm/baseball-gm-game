@@ -1,4 +1,7 @@
-import { getMeasurementModelLimitations } from "../services/measurement/measurementReportService.js";
+import {
+  getMeasurementDefinitions,
+  getMeasurementModelLimitations,
+} from "../services/measurement/measurementReportService.js";
 
 function setText(element, value) {
   if (element) element.textContent = String(value ?? "-");
@@ -121,6 +124,7 @@ function renderTeamResults(container, summary) {
     ["BB%", "BBPct", true],
     ["K%", "KPct", true],
     ["HR%", "HRPct", true],
+    ["BB/K", "BBPerK", false],
   ].map(([label, key, percentage]) => [
     label,
     percentage ? formatPct(results.away[key]) : formatNumber(results.away[key]),
@@ -168,7 +172,9 @@ function renderPlateDiscipline(container, data) {
   renderSideMetrics(container, data, [
     ["Pitches", "pitches"],
     ["PA", "PA"],
+    ["Pitches/PA", "pitchesPerPA"],
     ["Zone%", "zonePct", true],
+    ["Result Strike%", "resultStrikePct", true],
     ["Swing%", "swingPct", true],
     ["Z-Swing%", "zSwingPct", true],
     ["Chase%", "chasePct", true],
@@ -177,6 +183,7 @@ function renderPlateDiscipline(container, data) {
     ["Chase Contact%", "chaseContactPct", true],
     ["Whiff%", "whiffPct", true],
     ["Called Strike%", "calledStrikePct", true],
+    ["Called Ball%", "calledBallPct", true],
     ["Foul%", "foulPct", true],
     ["BIP/Pitch", "bipPerPitch", true],
     ["CSW%", "cswPct", true],
@@ -344,7 +351,8 @@ function renderSmoothingPercentiles(container, data) {
 }
 
 function renderPlayers(container, players) {
-  const rows = ["away", "home"].flatMap((side) =>
+  if (!container) return;
+  const battingRows = ["away", "home"].flatMap((side) =>
     (players?.[side] || []).map((player) => [
       side,
       player.lineupOrder,
@@ -361,11 +369,47 @@ function renderPlayers(container, players) {
       formatPct(player.hardHitPct),
     ])
   );
-  renderTable(
-    container,
-    ["Side", "#", "Player", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "BB%", "K%", "Avg EV", "HardHit%"],
-    rows
+  const disciplineRows = ["away", "home"].flatMap((side) =>
+    (players?.[side] || []).map((player) => [
+      side,
+      player.lineupOrder,
+      player.name,
+      formatNumber(player.pitchesPerPA, 2),
+      formatPct(player.swingPct),
+      formatPct(player.zSwingPct),
+      formatPct(player.chasePct),
+      formatPct(player.contactPct),
+      formatPct(player.zoneContactPct),
+      formatPct(player.chaseContactPct),
+      formatPct(player.whiffPct),
+      formatPct(player.calledStrikePct),
+      formatPct(player.cswPct),
+    ])
   );
+  const fragment = document.createDocumentFragment();
+  const battingHeading = document.createElement("h4");
+  battingHeading.textContent = "Player Batting";
+  const battingTable = document.createElement("div");
+  renderTable(
+    battingTable,
+    ["Side", "#", "Player", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "BB%", "K%", "Avg EV", "HardHit%"],
+    battingRows
+  );
+  const disciplineHeading = document.createElement("h4");
+  disciplineHeading.textContent = "Player Plate Discipline";
+  const disciplineTable = document.createElement("div");
+  renderTable(
+    disciplineTable,
+    ["Side", "#", "Player", "Pitches/PA", "Swing%", "Z-Swing%", "Chase%", "Contact%", "Zone Contact%", "Chase Contact%", "Whiff%", "Called Strike%", "CSW%"],
+    disciplineRows
+  );
+  fragment.append(
+    battingHeading,
+    battingTable,
+    disciplineHeading,
+    disciplineTable
+  );
+  container.replaceChildren(fragment);
 }
 
 function renderPitchers(container, pitchers) {
@@ -395,7 +439,23 @@ function renderPitchers(container, pitchers) {
 
 function renderLimitations(container) {
   if (!container) return;
+  const definitions = getMeasurementDefinitions();
   const limitations = getMeasurementModelLimitations();
+  const fragment = document.createDocumentFragment();
+  const definitionHeading = document.createElement("h4");
+  definitionHeading.textContent = "Definitions";
+  const definitionList = document.createElement("ul");
+  for (const text of [
+    definitions.courseBreakdown,
+    definitions.zoneClassification,
+    `AIR: ${definitions.battedBallClasses.AIR}`,
+  ]) {
+    const line = document.createElement("li");
+    line.textContent = text;
+    definitionList.append(line);
+  }
+  const limitationHeading = document.createElement("h4");
+  limitationHeading.textContent = "Model Limitations";
   const list = document.createElement("ul");
   for (const item of limitations.unavailableMetrics) {
     const line = document.createElement("li");
@@ -407,7 +467,13 @@ function renderLimitations(container) {
     line.textContent = `Note: ${note}`;
     list.append(line);
   }
-  container.replaceChildren(list);
+  fragment.append(
+    definitionHeading,
+    definitionList,
+    limitationHeading,
+    list
+  );
+  container.replaceChildren(fragment);
 }
 
 function renderAdvancedDiagnostics(dom, summary) {

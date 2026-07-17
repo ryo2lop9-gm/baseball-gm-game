@@ -15,6 +15,7 @@ import {
   recordPitchMeasurementEvent,
   runMeasurementBatches,
 } from "../services/measurement/measurementService.js";
+import { getRawPitchMeasurementValue } from "../services/measurement/measurementAdvancedService.js";
 import {
   createMeasurementHistogram,
   finalizeMeasurementHistogram,
@@ -65,6 +66,13 @@ function sumGroup(group, key) {
     (sum, entry) => sum + (Number(entry?.[key]) || 0),
     0
   );
+}
+
+function getMarkdownSection(markdown, title) {
+  const start = markdown.indexOf(`## ${title}`);
+  if (start < 0) return "";
+  const next = markdown.indexOf("\n## ", start + title.length + 3);
+  return markdown.slice(start, next < 0 ? markdown.length : next);
 }
 
 test("pitch and batted-ball measurement hooks do not change RNG or game result", () => {
@@ -127,6 +135,58 @@ test("invalid pitch events are diagnosed and excluded", () => {
   assert.equal(game.advanced.diagnostics.invalidPitchMeasurementEventCount, 1);
 });
 
+test("resolved course is aggregated independently from the zone decision", () => {
+  const game = createGameMeasurementAccumulator();
+  const baseEvent = {
+    battingSide: "away",
+    defenseSide: "home",
+    batterKey: "away:batter:1",
+    batterName: "Course Test",
+    batterRatings: {},
+    lineupIndex: 0,
+    pitcherKey: "home:pitcher:1",
+    pitcherName: "Course Pitcher",
+    pitcherRole: "starter",
+    pitcherRatings: {},
+    pitchMix: {},
+    ballsBefore: 0,
+    strikesBefore: 0,
+    swung: false,
+    madeContact: false,
+    pitchType: "fourSeam",
+    pitchVelocity: 95,
+    paResult: null,
+    strikeType: null,
+    ballType: "obvious",
+    isMistake: false,
+    drift: 0,
+  };
+
+  assert.equal(recordPitchMeasurementEvent(game, {
+    ...baseEvent,
+    course: "A",
+    isStrike: false,
+    pitchResult: "called_ball",
+  }), true);
+  assert.equal(recordPitchMeasurementEvent(game, {
+    ...baseEvent,
+    course: "Ball",
+    isStrike: true,
+    pitchResult: "called_strike",
+    strikeType: "looking",
+    ballType: null,
+  }), true);
+
+  assert.equal(
+    getRawPitchMeasurementValue(game.advanced.course.away.A, "pitches"),
+    1
+  );
+  assert.equal(
+    getRawPitchMeasurementValue(game.advanced.course.away.Ball, "pitches"),
+    1
+  );
+});
+
 test("advanced aggregate groups and entity totals reconcile", async () => {
   const teams = createMlbAverageValidationTeams();
   const summary = await runMeasurementBatches({
@@ -144,6 +204,13 @@ test("advanced aggregate groups and entity totals reconcile", async () => {
   assert.equal(sumGroup(summary.breakdowns.pitchType, "pitches"), pitches);
   assert.equal(sumGroup(summary.breakdowns.velocityBand, "pitches"), pitches);
   assert.equal(sumGroup(summary.breakdowns.course, "pitches"), pitches);
+  assert.equal(
+    Object.values(summary.breakdowns.course.combined).reduce(
+      (sum, value) => sum + value.batted.BIP,
+      0
+    ),
+    summary.battedBallMetrics.fairBattedBalls
+  );
   assert.ok(Math.abs(
     Object.values(summary.breakdowns.pitchType.combined).reduce(
       (sum, value) => sum + value.usagePct,
@@ -154,6 +221,14 @@ test("advanced aggregate groups and entity totals reconcile", async () => {
   assert.equal("exitVelocityHistogram" in summary.battingProfiles.combined, false);
   assert.equal("launchAngleHistogram" in summary.battingProfiles.combined, false);
   assert.equal(summary.gameDistribution.games, 25);
+  const profile = summary.battingProfiles.combined;
+  const tolerance = 1e-12;
+  assert.equal(profile.GB + profile.LD + profile.FB + profile.PU, profile.BIP);
+  assert.ok(Math.abs(profile.GBPct + profile.AIRPct - 1) < tolerance);
+  assert.ok(
+    Math.abs(profile.AIRPct - (profile.LDPct + profile.FBPct + profile.PUPct)) <
+      tolerance
+  );
   for (const group of ["qoc", "source", "sampleQuality", "neighborMode"]) {
     assert.equal(
       Object.values(summary.breakdowns[group].combined).reduce(
@@ -215,12 +290,65 @@ test("schema v2 report carries diagnostics, definitions, and explicit limitation
     assert.ok(Object.hasOwn(report, key), key);
   }
   assert.match(report.definitions.qoc, /analysis label/);
+  assert.match(report.definitions.courseBreakdown, /resolved course/);
+  assert.match(report.definitions.zoneClassification, /separate concepts/);
+  assert.equal(report.definitions.battedBallClasses.AIR, "LD + FB + PU");
   assert.equal(Object.hasOwn(report.breakdowns, "direction"), false);
   assert.ok(report.modelLimitations.unavailableMetrics.some(
     (item) => item.metric.includes("Direction")
   ));
   assert.match(markdown, /Plate Discipline/);
+  assert.match(markdown, /Pitches\/PA/);
+  assert.match(markdown, /Result Strike%/);
+  assert.match(markdown, /Called Ball%/);
+  assert.match(markdown, /BB\/K/);
   assert.match(markdown, /Smoothing Percentiles/);
   assert.match(markdown, /Model Limitations/);
+  const countSection = getMarkdownSection(markdown, "Count Breakdown");
+  const pitchTypeSection = getMarkdownSection(markdown, "Pitch Type Breakdown");
+  const velocitySection = getMarkdownSection(markdown, "Velocity Band Breakdown");
+  assert.match(countSection, /\| PA \| BB \| K \| HR \| AVG \| OBP \| SLG \| OPS \|/);
+  assert.match(pitchTypeSection, /\| PA \| AB \| H \| HR \| BB \| K \| AVG \| SLG \|/);
+  assert.match(velocitySection, /\| PA \| AB \| H \| 2B \| 3B \| HR \| BB \| K \| AVG \| OBP \| SLG \| OPS \|/);
+  assert.match(markdown, /Expansion Level Outcome Breakdown/);
+  assert.match(markdown, /Course Breakdown uses the resolved course/);
+  assert.match(markdown, /Zone% uses isStrike/);
+  assert.match(markdown, /AIR: LD \+ FB \+ PU/);
+  for (const player of [...report.players.away, ...report.players.home]) {
+    for (const key of [
+      "zoneContactPct",
+      "chaseContactPct",
+      "pitchesPerPA",
+      "calledStrikePct",
+      "cswPct",
+    ]) {
+      assert.equal(typeof player[key], "number", `${player.name}.${key}`);
+    }
+  }
   assert.doesNotMatch(json, /NaN|Infinity|undefined/);
+  assert.equal(JSON.parse(json).reportSchemaVersion, 2);
+});
+
+test("measurement HTML ids are unique and quality breakdown rendering stays wired", async () => {
+  const [html, domSource, renderSource] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../pages/measurementDom.js", import.meta.url), "utf8"),
+    readFile(new URL("../render/measurementRender.js", import.meta.url), "utf8"),
+  ]);
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+
+  assert.deepEqual(duplicateIds, []);
+  assert.equal(ids.filter((id) => id === "measurementQualityBreakdowns").length, 1);
+  assert.match(
+    domSource,
+    /qualityBreakdowns:\s*document\.getElementById\("measurementQualityBreakdowns"\)/
+  );
+  for (const label of ["Strike Type", "Ball Type", "Mistake", "Drift"]) {
+    assert.match(renderSource, new RegExp(`\\["${label}"`));
+  }
+  assert.match(
+    renderSource,
+    /renderPitchQualityBreakdowns\(dom\.qualityBreakdowns, summary\.breakdowns\)/
+  );
 });
