@@ -629,9 +629,20 @@ test("root state normalization preserves measurement and old saves", () => {
   assert.equal(oldSave.appState.currentPage, "gm");
 });
 
-test("measurement page is separate from tuning and Worker uses module URL", async () => {
-  const [indexSource, tuningSource, runnerSource, workerSource] = await Promise.all([
+test("measurement page is separate and cache-busted module entrypoints stay wired", async () => {
+  const [
+    indexSource,
+    mainSource,
+    bootstrapSource,
+    routerSource,
+    tuningSource,
+    runnerSource,
+    workerSource,
+  ] = await Promise.all([
     readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../main.js", import.meta.url), "utf8"),
+    readFile(new URL("../bootstrap/appBootstrap.js", import.meta.url), "utf8"),
+    readFile(new URL("../bootstrap/router.js", import.meta.url), "utf8"),
     readFile(new URL("../pages/tuningPage.js", import.meta.url), "utf8"),
     readFile(
       new URL("../services/measurement/measurementRunner.js", import.meta.url),
@@ -645,8 +656,16 @@ test("measurement page is separate from tuning and Worker uses module URL", asyn
 
   assert.match(indexSource, /id="measurementPage"/);
   assert.match(indexSource, /id="showMeasurementPageBtn"/);
+  assert.match(indexSource, /no-cache, no-store, must-revalidate/);
+  assert.match(indexSource, /main\.js\?v=codex9-1/);
+  assert.match(mainSource, /appBootstrap\.js\?v=codex9-1/);
+  assert.match(bootstrapSource, /appRouter\.js\?v=codex9-1/);
+  assert.match(bootstrapSource, /router\.js\?v=codex9-1/);
+  assert.match(bootstrapSource, /rootStateFactory\.js\?v=codex9-1/);
+  assert.match(routerSource, /appRouter\.js\?v=codex9-1/);
   assert.doesNotMatch(tuningSource, /measurementProgress|tuningMeasurementWorker/);
   assert.match(runnerSource, /new URL\(/);
+  assert.match(runnerSource, /tuningMeasurementWorker\.js\?v=codex9-1/);
   assert.match(runnerSource, /type:\s*["']module["']/);
   assert.match(workerSource, /loadEvLaLookup\(\)/);
   assert.match(EV_LA_LOOKUP_URL.pathname, /data\/ev_la_lookup\.json$/);

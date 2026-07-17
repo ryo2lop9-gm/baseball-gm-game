@@ -1,5 +1,5 @@
 const WORKER_URL = new URL(
-  "../../workers/tuningMeasurementWorker.js",
+  "../../workers/tuningMeasurementWorker.js?v=codex9-1",
   import.meta.url
 );
 

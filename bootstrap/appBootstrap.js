@@ -1,15 +1,15 @@
-import { createRouteDom, applyRouteVisibility } from "./appRouter.js";
-import { createPageRouter } from "./router.js";
+import { createRouteDom, applyRouteVisibility } from "./appRouter.js?v=codex9-1";
+import { createPageRouter } from "./router.js?v=codex9-1";
 import { createRootStatePersistence } from "./persistence.js";
 import { createSaveControls } from "./saveControls.js";
-import { createRootStateFactory } from "./rootStateFactory.js";
+import { createRootStateFactory } from "./rootStateFactory.js?v=codex9-1";
 import { createRootStateStore } from "./rootStateStore.js";
 import { loadEvLaLookup } from "../services/evLaLookupStore.js";
 
 import { createGMDeskPageController } from "../pages/gmDeskPage.js";
 import { createStatsPageController } from "../pages/statsPage.js";
 import { createTuningPageController } from "../pages/tuningPage.js";
-import { createMeasurementPageController } from "../pages/measurementPage.js";
+import { createMeasurementPageController } from "../pages/measurementPage.js?v=codex9-1";
 
 import { createInitialAppState, createGMDeskFactory } from "./gmBootstrap.js";
 import { createTuningBootstrap } from "./tuningBootstrap.js";
