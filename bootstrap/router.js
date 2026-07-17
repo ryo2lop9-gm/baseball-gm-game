@@ -9,6 +9,7 @@ export function createPageRouter({
   gmDeskPageController,
   statsPageController,
   tuningPageController,
+  measurementPageController,
 }) {
   function setPage(pageName) {
     setCurrentPageState(pageName);
@@ -22,6 +23,7 @@ export function createPageRouter({
       onShowGM: () => setPage("gm"),
       onShowStats: () => setPage("stats"),
       onShowTuning: () => setPage("tuning"),
+      onShowMeasurement: () => setPage("measurement"),
       onJumpToStats: () => setPage("stats"),
     });
 
@@ -36,6 +38,7 @@ export function createPageRouter({
 
     statsPageController.wireEvents();
     tuningPageController.wireEvents();
+    measurementPageController.wireEvents();
 
     window.addEventListener("beforeunload", saveRootState);
   }
@@ -43,7 +46,9 @@ export function createPageRouter({
   function applyInitialPage() {
     const currentPage = getCurrentPage();
     const initialPage =
-      currentPage === "stats" || currentPage === "tuning"
+      currentPage === "stats" ||
+      currentPage === "tuning" ||
+      currentPage === "measurement"
         ? currentPage
         : "gm";
 

@@ -38,10 +38,6 @@ import {
   addOutInPlayStat,
 } from "../../services/statsUpdateService.js";
 
-function random() {
-  return Math.random();
-}
-
 function emitLog(options, text) {
   if (typeof options?.onLog !== "function") return;
   options.onLog(text);
@@ -76,7 +72,8 @@ function resolveBattedBallResult(
     qoc,
     battedBall,
     options,
-    random,
+    random:
+      typeof options?.random === "function" ? options.random : Math.random,
     addQoCToBox: (runtimeState, runtimeQoc) =>
       addQoCToBox(runtimeState, runtimeQoc, { currentSide }),
     addOutInPlayStat,
@@ -97,12 +94,23 @@ function resolveBattedBallResult(
   });
 }
 
-export function createFastSimulationOptions() {
-  return {};
+export function createFastSimulationOptions(runtime = {}) {
+  const options = {};
+
+  if (typeof runtime.random === "function") {
+    options.random = runtime.random;
+  }
+  if (typeof runtime.onBattedBallMeasurement === "function") {
+    options.onBattedBallMeasurement = runtime.onBattedBallMeasurement;
+  }
+
+  return options;
 }
 
 export function stepPitchMutable(state, rawOptions = {}) {
   const options = { ...rawOptions };
+  const random =
+    typeof options.random === "function" ? options.random : Math.random;
   if (state.isComplete) return state;
 
   beginPlateAppearanceIfNeeded(state, {

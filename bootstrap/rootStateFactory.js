@@ -36,7 +36,8 @@ export function createRootStateFactory({
     if (
       nextAppState.currentPage !== "gm" &&
       nextAppState.currentPage !== "stats" &&
-      nextAppState.currentPage !== "tuning"
+      nextAppState.currentPage !== "tuning" &&
+      nextAppState.currentPage !== "measurement"
     ) {
       nextAppState.currentPage = "gm";
     }

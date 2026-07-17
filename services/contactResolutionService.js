@@ -48,6 +48,11 @@ function buildResolutionContext({ state, batter, pitchType, course }) {
   };
 }
 
+function emitBattedBallMeasurement(options, event) {
+  if (typeof options?.onBattedBallMeasurement !== "function") return;
+  options.onBattedBallMeasurement(event);
+}
+
 function resolveOutcomeModel({ state, batter, pitchType, course, battedBall }) {
   const context = buildResolutionContext({ state, batter, pitchType, course });
   const hasValidBattedBall =
@@ -129,6 +134,36 @@ export function resolveContactResult({
   const singleCut = outCut + probs.single;
   const doubleCut = singleCut + probs.double;
   const tripleCut = doubleCut + probs.triple;
+  const outcome =
+    roll < outCut
+      ? "out"
+      : roll < singleCut
+        ? "single"
+        : roll < doubleCut
+          ? "double"
+          : roll < tripleCut
+            ? "triple"
+            : "homeRun";
+
+  emitBattedBallMeasurement(options, {
+    side,
+    exitVelocity: battedBall.exitVelocity,
+    launchAngle: battedBall.launchAngle,
+    qoc,
+    evLaKey: outcomeModel.key,
+    source: outcomeModel.source,
+    sampleQuality: outcomeModel.sampleQuality,
+    neighborMode: outcomeModel.smoothing?.neighborMode ?? null,
+    expansionLevel: outcomeModel.smoothing?.expansionLevel ?? null,
+    targetBattedBalls: outcomeModel.smoothing?.targetBattedBalls ?? 0,
+    targetWeight: outcomeModel.smoothing?.targetWeight ?? 0,
+    neighborEffectiveSampleSize:
+      outcomeModel.smoothing?.neighborEffectiveSampleSize ?? 0,
+    physicalConstraints: [
+      ...(outcomeModel.smoothing?.physicalConstraints || []),
+    ],
+    outcome,
+  });
 
   if (roll < outCut) {
     state.outs += 1;

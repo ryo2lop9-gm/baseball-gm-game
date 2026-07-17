@@ -9,6 +9,7 @@ import { loadEvLaLookup } from "../services/evLaLookupStore.js";
 import { createGMDeskPageController } from "../pages/gmDeskPage.js";
 import { createStatsPageController } from "../pages/statsPage.js";
 import { createTuningPageController } from "../pages/tuningPage.js";
+import { createMeasurementPageController } from "../pages/measurementPage.js";
 
 import { createInitialAppState, createGMDeskFactory } from "./gmBootstrap.js";
 import { createTuningBootstrap } from "./tuningBootstrap.js";
@@ -143,12 +144,14 @@ async function initializeApp() {
     if (currentPage === "gm") gmDeskPageController.render();
     if (currentPage === "stats") statsPageController.render();
     if (currentPage === "tuning") tuningPageController.render();
+    if (currentPage === "measurement") measurementPageController.render();
   }
 
   function renderAllPages() {
     gmDeskPageController.render();
     statsPageController.render();
     tuningPageController.render();
+    measurementPageController.render();
   }
 
   function setCurrentPageState(pageName) {
@@ -230,6 +233,12 @@ async function initializeApp() {
       ),
   });
 
+  const measurementPageController = createMeasurementPageController({
+    getTuningRosterBundle: rootStateStore.getTuningRosterBundle,
+    buildCurrentTuningTeams: (rosterBundle) =>
+      tuningBootstrap.buildCurrentTuningTeams(rosterBundle),
+  });
+
   const router = createPageRouter({
     routeDom,
     getCurrentPage: () => rootStateStore.getAppState().currentPage,
@@ -239,6 +248,7 @@ async function initializeApp() {
     gmDeskPageController,
     statsPageController,
     tuningPageController,
+    measurementPageController,
   });
 
   function bootstrap() {

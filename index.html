@@ -521,6 +521,108 @@
 
     .log-line + .log-line { margin-top: 4px; }
 
+    .measurement-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .measurement-config-grid,
+    .measurement-team-grid,
+    .measurement-status-grid,
+    .measurement-result-grid,
+    .measurement-diagnostic-grid,
+    .measurement-kpi-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .measurement-config-grid { grid-template-columns: 1.2fr 0.8fr; }
+    .measurement-team-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+    .measurement-status-grid { grid-template-columns: repeat(5, minmax(120px, 1fr)); }
+    .measurement-result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .measurement-diagnostic-grid { grid-template-columns: 1fr 1fr; }
+    .measurement-kpi-grid { grid-template-columns: repeat(6, minmax(120px, 1fr)); }
+
+    .measurement-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .measurement-preset-row,
+    .measurement-action-row,
+    .measurement-share-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .measurement-team-item,
+    .measurement-kpi {
+      min-width: 0;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .measurement-kpi-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .measurement-kpi-value {
+      margin-top: 6px;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .measurement-table-scroll {
+      width: 100%;
+      min-width: 0;
+      overflow-x: auto;
+    }
+
+    .measurement-stack,
+    .measurement-stack > .card,
+    .measurement-config-grid > *,
+    .measurement-result-grid > *,
+    .measurement-diagnostic-grid > * {
+      min-width: 0;
+    }
+
+    .measurement-table-scroll table { min-width: 520px; }
+
+    .measurement-progress {
+      width: 100%;
+      height: 14px;
+      accent-color: var(--accent);
+    }
+
+    .measurement-share-textarea {
+      width: 100%;
+      min-height: 260px;
+      margin-top: 12px;
+      padding: 12px;
+      resize: vertical;
+      color: var(--text);
+      background: rgba(0,0,0,0.18);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font: 12px/1.55 Consolas, monospace;
+    }
+
+    .measurement-warning {
+      border-left: 3px solid var(--warn);
+      padding-left: 10px;
+    }
+
+    button:disabled,
+    input:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
     @media (max-width: 1100px) {
       .gm-grid,
       .gm-bottom-grid,
@@ -528,7 +630,10 @@
       .tuning-live-layout,
       .tuning-state-grid,
       .tuning-analysis-grid,
-      .tuning-season-header {
+      .tuning-season-header,
+      .measurement-config-grid,
+      .measurement-result-grid,
+      .measurement-diagnostic-grid {
         grid-template-columns: 1fr;
       }
 
@@ -536,7 +641,10 @@
       .stats-top-grid,
       .stats-filter-grid,
       .editor-grid,
-      .tuning-metric-grid {
+      .tuning-metric-grid,
+      .measurement-team-grid,
+      .measurement-status-grid,
+      .measurement-kpi-grid {
         grid-template-columns: 1fr 1fr;
       }
     }
@@ -546,7 +654,11 @@
       .stats-top-grid,
       .stats-filter-grid,
       .editor-grid,
-      .tuning-metric-grid {
+      .tuning-metric-grid,
+      .measurement-controls,
+      .measurement-team-grid,
+      .measurement-status-grid,
+      .measurement-kpi-grid {
         grid-template-columns: 1fr;
       }
 
@@ -570,6 +682,7 @@
       <button id="showGMPageBtn" class="tab-btn active">GMデスク</button>
       <button id="showStatsPageBtn" class="tab-btn">選手成績一覧</button>
       <button id="showTuningPageBtn" class="tab-btn">チューニング</button>
+      <button id="showMeasurementPageBtn" class="tab-btn">高速計測</button>
     </nav>
 
     <section id="gmPage" class="page active">
@@ -1081,6 +1194,138 @@
             <div id="tuningSeasonHomePlayerStatsTable"></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section id="measurementPage" class="page">
+      <div class="section-header">
+        <div>
+          <h2 class="page-title">高速計測</h2>
+          <p class="page-subtitle">Workerによる再現可能な大量試合集計</p>
+        </div>
+      </div>
+
+      <div class="measurement-stack">
+        <section class="card">
+          <h3 class="panel-title">1. 実行設定</h3>
+          <div class="measurement-config-grid">
+            <div>
+              <div class="section-note">試合数プリセット</div>
+              <div class="measurement-preset-row">
+                <button type="button" data-measurement-games="100">100</button>
+                <button type="button" data-measurement-games="1000">1,000</button>
+                <button type="button" data-measurement-games="5000">5,000</button>
+                <button type="button" data-measurement-games="10000">10,000</button>
+              </div>
+              <div class="measurement-controls" style="margin-top:12px;">
+                <label>
+                  <span class="section-note">試合数</span>
+                  <input id="measurementGameCountInput" type="number" min="1" max="10000" step="1" value="100" />
+                </label>
+                <label>
+                  <span class="section-note">Seed</span>
+                  <input id="measurementSeedInput" type="number" step="1" value="123456789" />
+                </label>
+              </div>
+              <div class="measurement-action-row" style="margin-top:12px;">
+                <button id="measurementStartBtn" type="button" class="primary-btn">計測開始</button>
+                <button id="measurementCancelBtn" type="button" disabled>キャンセル</button>
+              </div>
+              <div id="measurementInputError" class="section-note" role="alert" style="margin-top:10px;"></div>
+            </div>
+
+            <div>
+              <div class="measurement-team-grid">
+                <div class="measurement-team-item">
+                  <div class="mini-label">Away</div>
+                  <div id="measurementAwayTeam" class="summary-value">-</div>
+                  <div id="measurementAwayStarter" class="section-note">-</div>
+                </div>
+                <div class="measurement-team-item">
+                  <div class="mini-label">Home</div>
+                  <div id="measurementHomeTeam" class="summary-value">-</div>
+                  <div id="measurementHomeStarter" class="section-note">-</div>
+                </div>
+                <div class="measurement-team-item">
+                  <div class="mini-label">Lineup Away / Home</div>
+                  <div id="measurementLineupSize" class="summary-value">-</div>
+                </div>
+                <div class="measurement-team-item">
+                  <div class="mini-label">Seed</div>
+                  <div id="measurementActiveSeed" class="summary-value">123456789</div>
+                </div>
+                <div class="measurement-team-item">
+                  <div class="mini-label">Games</div>
+                  <div id="measurementActiveGameCount" class="summary-value">100</div>
+                </div>
+              </div>
+              <p class="section-note">選手能力の変更はチューニングページで行ってください</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tuning-section-head">
+            <h3 class="panel-title">2. 実行状況</h3>
+            <span id="measurementStatus" class="status-pill">idle</span>
+          </div>
+          <progress id="measurementProgress" class="measurement-progress" max="100" value="0"></progress>
+          <div id="measurementProgressText" class="section-note">0.0%</div>
+          <div class="measurement-status-grid" style="margin-top:12px;">
+            <div><div class="mini-label">Completed</div><div id="measurementCompletedGames" class="summary-value">0</div></div>
+            <div><div class="mini-label">Failed</div><div id="measurementFailedGames" class="summary-value">0</div></div>
+            <div><div class="mini-label">Elapsed</div><div id="measurementElapsed" class="summary-value">0 sec</div></div>
+            <div><div class="mini-label">Games / sec</div><div id="measurementGamesPerSecond" class="summary-value">0</div></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">3. 主要KPI</h3>
+          <div id="measurementKpis" class="measurement-kpi-grid"></div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">4. チーム別成績</h3>
+          <div class="measurement-table-scroll"><div id="measurementTeamResults"></div></div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">5. EV/LA平滑化診断</h3>
+          <div class="measurement-result-grid">
+            <div class="measurement-table-scroll"><div id="measurementSmoothingSummary"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementSourceTable"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementSampleQualityTable"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementNeighborModeTable"></div></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">6. Neighbor Mode別結果</h3>
+          <div class="measurement-table-scroll"><div id="measurementNeighborOutcomes"></div></div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">7. QoC</h3>
+          <div class="measurement-table-scroll"><div id="measurementQoCTable"></div></div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">8. 異常診断</h3>
+          <div class="measurement-diagnostic-grid">
+            <div class="measurement-table-scroll"><div id="measurementDiagnostics"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementSimulationErrors"></div></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3 class="panel-title">9. AI共有用出力</h3>
+          <div class="measurement-share-actions">
+            <button id="measurementCopyMarkdownBtn" type="button" disabled>AI共有用テキストをコピー</button>
+            <button id="measurementCopyJsonBtn" type="button" disabled>JSONをコピー</button>
+          </div>
+          <div id="measurementCopyStatus" class="section-note" role="status" style="margin-top:10px;"></div>
+          <textarea id="measurementShareTextarea" class="measurement-share-textarea" readonly></textarea>
+        </section>
       </div>
     </section>
   </div>
