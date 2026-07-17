@@ -1,3 +1,5 @@
+import { getMeasurementModelLimitations } from "../services/measurement/measurementReportService.js";
+
 function setText(element, value) {
   if (element) element.textContent = String(value ?? "-");
 }
@@ -51,6 +53,8 @@ function renderKpis(container, summary) {
 
   const combined = summary.results.combined;
   const metrics = summary.battedBallMetrics;
+  const discipline = summary.plateDiscipline?.combined || {};
+  const profile = summary.battingProfiles?.combined || {};
   const values = [
     ["Completed", summary.run.completedGames],
     ["Runs / Team", formatNumber(combined.averageRuns, 2)],
@@ -61,6 +65,8 @@ function renderKpis(container, summary) {
     ["BB%", formatPct(combined.BBPct)],
     ["K%", formatPct(combined.KPct)],
     ["HR%", formatPct(combined.HRPct)],
+    ["Pitches", formatNumber(discipline.pitches)],
+    ["HardHit%", formatPct(profile.hardHitPct)],
     ["Avg EV", `${formatNumber(metrics.averageExitVelocity, 2)} mph`],
     ["Avg LA", `${formatNumber(metrics.averageLaunchAngle, 2)} deg`],
   ];
@@ -88,6 +94,7 @@ function renderTeamResults(container, summary) {
   }
   const results = summary.results;
   const rows = [
+    ["G", "G", false],
     ["Wins", "wins", false],
     ["Runs", "runs", false],
     ["Runs/Game/Team", "averageRuns", false],
@@ -100,11 +107,17 @@ function renderTeamResults(container, summary) {
     ["HR", "HR", false],
     ["BB", "BB", false],
     ["K", "K", false],
+    ["Swinging K", "swingingK", false],
+    ["Looking K", "lookingK", false],
+    ["XBH", "XBH", false],
+    ["RBI", "RBI", false],
     ["TB", "totalBases", false],
     ["AVG", "AVG", false],
     ["OBP", "OBP", false],
     ["SLG", "SLG", false],
     ["OPS", "OPS", false],
+    ["ISO", "ISO", false],
+    ["BABIP", "BABIP", false],
     ["BB%", "BBPct", true],
     ["K%", "KPct", true],
     ["HR%", "HRPct", true],
@@ -117,6 +130,324 @@ function renderTeamResults(container, summary) {
       : formatNumber(results.combined[key]),
   ]);
   renderTable(container, ["Item", "Away", "Home", "Combined"], rows);
+}
+
+function renderSideMetrics(container, data, rows) {
+  renderTable(
+    container,
+    ["Item", "Away", "Home", "Combined"],
+    rows.map(([label, key, percentage, child]) => {
+      const display = (side) => {
+        const raw = child ? data?.[side]?.[key]?.[child] : data?.[side]?.[key];
+        return percentage ? formatPct(raw) : formatNumber(raw);
+      };
+      return [label, display("away"), display("home"), display("combined")];
+    })
+  );
+}
+
+function renderGameDistribution(container, distribution) {
+  renderTable(container, ["Metric", "Value"], [
+    ["Games", distribution?.games || 0],
+    ["Average run differential", formatNumber(distribution?.averageRunDifferential)],
+    ["One-run game%", formatPct(distribution?.oneRunGamePct)],
+    ["Shutout team-game%", formatPct(distribution?.shutoutPct)],
+    ["Extra-inning%", formatPct(distribution?.extraInningPct)],
+    ["Average final inning", formatNumber(distribution?.averageFinalInning)],
+    ["Away win%", formatPct(distribution?.awayWinPct)],
+    ["Home win%", formatPct(distribution?.homeWinPct)],
+    ["Walk-off%", formatPct(distribution?.walkOffPct)],
+    [
+      "Score P10 / P50 / P90",
+      `${formatNumber(distribution?.score?.combined?.p10)} / ${formatNumber(distribution?.score?.combined?.p50)} / ${formatNumber(distribution?.score?.combined?.p90)}`,
+    ],
+  ]);
+}
+
+function renderPlateDiscipline(container, data) {
+  renderSideMetrics(container, data, [
+    ["Pitches", "pitches"],
+    ["PA", "PA"],
+    ["Zone%", "zonePct", true],
+    ["Swing%", "swingPct", true],
+    ["Z-Swing%", "zSwingPct", true],
+    ["Chase%", "chasePct", true],
+    ["Contact%", "contactPct", true],
+    ["Z-Contact%", "zoneContactPct", true],
+    ["Chase Contact%", "chaseContactPct", true],
+    ["Whiff%", "whiffPct", true],
+    ["Called Strike%", "calledStrikePct", true],
+    ["Foul%", "foulPct", true],
+    ["BIP/Pitch", "bipPerPitch", true],
+    ["CSW%", "cswPct", true],
+    ["First-pitch Strike%", "firstPitchStrikePct", true],
+  ]);
+}
+
+function renderBattedProfile(container, data) {
+  renderSideMetrics(container, data, [
+    ["BIP", "BIP"],
+    ["Average EV", "averageExitVelocity"],
+    ["Max EV", "exitVelocity", false, "max"],
+    ["EV P90", "exitVelocity", false, "p90"],
+    ["Average LA", "averageLaunchAngle"],
+    ["LA P50", "launchAngle", false, "p50"],
+    ["GB%", "GBPct", true],
+    ["LD%", "LDPct", true],
+    ["FB%", "FBPct", true],
+    ["PU%", "PUPct", true],
+    ["AIR%", "AIRPct", true],
+    ["HR/FB", "homeRunPerFlyBall", true],
+    ["HardHit%", "hardHitPct", true],
+    ["SweetSpot%", "sweetSpotPct", true],
+  ]);
+}
+
+function renderPitchBreakdown(container, group) {
+  const rows = Object.entries(group?.combined || {}).map(([key, value]) => [
+    key,
+    value.pitches || 0,
+    formatPct(value.zonePct),
+    formatPct(value.swingPct),
+    formatPct(value.chasePct),
+    formatPct(value.contactPct),
+    formatPct(value.whiffPct),
+    formatPct(value.cswPct),
+    value.fairBattedBalls || 0,
+    formatNumber(value.AVG),
+    formatNumber(value.SLG),
+  ]);
+  renderTable(
+    container,
+    ["Group", "Pitches", "Zone%", "Swing%", "Chase%", "Contact%", "Whiff%", "CSW%", "BIP", "AVG", "SLG"],
+    rows
+  );
+}
+
+function renderPitchTypeBreakdown(container, group) {
+  const rows = Object.entries(group?.combined || {}).map(([key, value]) => [
+    key,
+    value.pitches || 0,
+    formatPct(value.usagePct),
+    formatPct(value.zonePct),
+    formatPct(value.swingPct),
+    formatPct(value.chasePct),
+    formatPct(value.contactPct),
+    formatPct(value.whiffPct),
+    value.PA || 0,
+    formatNumber(value.AVG),
+    formatNumber(value.SLG),
+  ]);
+  renderTable(
+    container,
+    ["Pitch Type", "Pitches", "Usage%", "Zone%", "Swing%", "Chase%", "Contact%", "Whiff%", "PA", "AVG", "SLG"],
+    rows
+  );
+}
+
+function renderCourseBreakdown(container, group) {
+  const rows = Object.entries(group?.combined || {}).map(([key, value]) => [
+    key,
+    value.pitches || 0,
+    value.batted?.BIP || 0,
+    formatNumber(value.batted?.averageExitVelocity, 2),
+    formatNumber(value.batted?.averageLaunchAngle, 2),
+    formatPct(value.batted?.rates?.out),
+    formatPct(value.batted?.rates?.single),
+    formatPct(value.batted?.rates?.double),
+    formatPct(value.batted?.rates?.triple),
+    formatPct(value.batted?.rates?.homeRun),
+  ]);
+  renderTable(
+    container,
+    ["Course", "Pitches", "BIP", "Avg EV", "Avg LA", "Out%", "1B%", "2B%", "3B%", "HR%"],
+    rows
+  );
+}
+
+function renderBattedBreakdown(container, group) {
+  const rows = Object.entries(group?.combined || {}).map(([key, value]) => [
+    key,
+    value.BIP || 0,
+    formatNumber(value.averageExitVelocity, 2),
+    formatNumber(value.averageLaunchAngle, 2),
+    formatPct(value.rates?.out),
+    formatPct(value.rates?.single),
+    formatPct(value.rates?.double),
+    formatPct(value.rates?.triple),
+    formatPct(value.rates?.homeRun),
+  ]);
+  renderTable(
+    container,
+    ["Group", "BIP", "Avg EV", "Avg LA", "Out%", "1B%", "2B%", "3B%", "HR%"],
+    rows
+  );
+}
+
+function renderOutcomeBreakdowns(container, breakdowns) {
+  if (!container) return;
+  const fragment = document.createDocumentFragment();
+  for (const [label, group] of [
+    ["QoC", breakdowns?.qoc],
+    ["Source", breakdowns?.source],
+    ["Sample Quality", breakdowns?.sampleQuality],
+    ["Neighbor Mode", breakdowns?.neighborMode],
+    ["Expansion Level", breakdowns?.expansionLevel],
+  ]) {
+    const heading = document.createElement("h4");
+    heading.textContent = label;
+    const tableHost = document.createElement("div");
+    renderBattedBreakdown(tableHost, group);
+    fragment.append(heading, tableHost);
+  }
+  container.replaceChildren(fragment);
+}
+
+function renderPitchQualityBreakdowns(container, breakdowns) {
+  if (!container) return;
+  const fragment = document.createDocumentFragment();
+  for (const [label, group] of [
+    ["Strike Type", breakdowns?.strikeType],
+    ["Ball Type", breakdowns?.ballType],
+    ["Mistake", breakdowns?.mistake],
+    ["Drift", breakdowns?.drift],
+  ]) {
+    const heading = document.createElement("h4");
+    heading.textContent = label;
+    const tableHost = document.createElement("div");
+    renderPitchBreakdown(tableHost, group);
+    fragment.append(heading, tableHost);
+  }
+  container.replaceChildren(fragment);
+}
+
+function renderSmoothingPercentiles(container, data) {
+  const rows = Object.entries(data?.combined || {}).map(([key, value]) => [
+    key,
+    value.count || 0,
+    formatNumber(value.average),
+    formatNumber(value.standardDeviation),
+    formatNumber(value.min),
+    formatNumber(value.p10),
+    formatNumber(value.p25),
+    formatNumber(value.p50),
+    formatNumber(value.p75),
+    formatNumber(value.p90),
+    formatNumber(value.p95),
+    formatNumber(value.max),
+  ]);
+  renderTable(
+    container,
+    ["Metric", "N", "Mean", "SD", "Min", "P10", "P25", "P50", "P75", "P90", "P95", "Max"],
+    rows
+  );
+}
+
+function renderPlayers(container, players) {
+  const rows = ["away", "home"].flatMap((side) =>
+    (players?.[side] || []).map((player) => [
+      side,
+      player.lineupOrder,
+      player.name,
+      player.PA,
+      formatNumber(player.AVG),
+      formatNumber(player.OBP),
+      formatNumber(player.SLG),
+      formatNumber(player.OPS),
+      player.HR,
+      formatPct(player.BBPct),
+      formatPct(player.KPct),
+      formatNumber(player.averageExitVelocity, 2),
+      formatPct(player.hardHitPct),
+    ])
+  );
+  renderTable(
+    container,
+    ["Side", "#", "Player", "PA", "AVG", "OBP", "SLG", "OPS", "HR", "BB%", "K%", "Avg EV", "HardHit%"],
+    rows
+  );
+}
+
+function renderPitchers(container, pitchers) {
+  const rows = ["away", "home"].flatMap((side) =>
+    (pitchers?.[side] || []).map((pitcher) => [
+      side,
+      pitcher.name,
+      pitcher.role,
+      pitcher.pitches,
+      pitcher.BF,
+      pitcher.inningsPitched,
+      pitcher.H,
+      pitcher.HR,
+      pitcher.BB,
+      pitcher.K,
+      formatPct(pitcher.KPct),
+      formatPct(pitcher.BBPct),
+      formatNumber(pitcher.WHIP),
+    ])
+  );
+  renderTable(
+    container,
+    ["Team", "Pitcher", "Role", "Pitches", "BF", "IP", "H", "HR", "BB", "K", "K%", "BB%", "WHIP"],
+    rows
+  );
+}
+
+function renderLimitations(container) {
+  if (!container) return;
+  const limitations = getMeasurementModelLimitations();
+  const list = document.createElement("ul");
+  for (const item of limitations.unavailableMetrics) {
+    const line = document.createElement("li");
+    line.textContent = `${item.metric}: ${item.reason}`;
+    list.append(line);
+  }
+  for (const note of limitations.interpretationNotes) {
+    const line = document.createElement("li");
+    line.textContent = `Note: ${note}`;
+    list.append(line);
+  }
+  container.replaceChildren(list);
+}
+
+function renderAdvancedDiagnostics(dom, summary) {
+  if (!summary) {
+    for (const container of [
+      dom.gameDistribution,
+      dom.plateDiscipline,
+      dom.battedProfile,
+      dom.countBreakdown,
+      dom.pitchTypeBreakdown,
+      dom.velocityBandBreakdown,
+      dom.courseBreakdown,
+      dom.qualityBreakdowns,
+      dom.evBandBreakdown,
+      dom.laBandBreakdown,
+      dom.outcomeBreakdowns,
+      dom.smoothingPercentiles,
+      dom.players,
+      dom.pitchers,
+    ]) {
+      container?.replaceChildren();
+    }
+    renderLimitations(dom.limitations);
+    return;
+  }
+  renderGameDistribution(dom.gameDistribution, summary.gameDistribution);
+  renderPlateDiscipline(dom.plateDiscipline, summary.plateDiscipline);
+  renderBattedProfile(dom.battedProfile, summary.battingProfiles);
+  renderPitchBreakdown(dom.countBreakdown, summary.breakdowns?.count);
+  renderPitchTypeBreakdown(dom.pitchTypeBreakdown, summary.breakdowns?.pitchType);
+  renderPitchBreakdown(dom.velocityBandBreakdown, summary.breakdowns?.velocityBand);
+  renderCourseBreakdown(dom.courseBreakdown, summary.breakdowns?.course);
+  renderPitchQualityBreakdowns(dom.qualityBreakdowns, summary.breakdowns);
+  renderBattedBreakdown(dom.evBandBreakdown, summary.breakdowns?.evBand);
+  renderBattedBreakdown(dom.laBandBreakdown, summary.breakdowns?.laBand);
+  renderOutcomeBreakdowns(dom.outcomeBreakdowns, summary.breakdowns);
+  renderSmoothingPercentiles(dom.smoothingPercentiles, summary.smoothingDiagnostics);
+  renderPlayers(dom.players, summary.players);
+  renderPitchers(dom.pitchers, summary.pitchers);
+  renderLimitations(dom.limitations);
 }
 
 function renderDistribution(container, distribution) {
@@ -265,6 +596,7 @@ export function renderMeasurementPage(state, dom) {
   renderTeamResults(dom.teamResults, state.summary);
   renderSmoothing(dom, state.summary);
   renderQoC(dom.qocTable, state.summary);
+  renderAdvancedDiagnostics(dom, state.summary);
   renderDiagnostics(dom, state.summary);
 
   const canShare = Boolean(state.markdown && state.json);

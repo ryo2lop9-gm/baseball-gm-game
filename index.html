@@ -620,6 +620,22 @@
       padding-left: 10px;
     }
 
+    .measurement-details {
+      min-width: 0;
+    }
+
+    .measurement-details > summary {
+      cursor: pointer;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 800;
+      list-style-position: outside;
+    }
+
+    .measurement-details > summary + * {
+      margin-top: 14px;
+    }
+
     button:disabled,
     input:disabled {
       cursor: not-allowed;
@@ -1312,6 +1328,60 @@
           <div class="measurement-table-scroll"><div id="measurementQoCTable"></div></div>
         </section>
 
+        <details class="card measurement-details" open>
+          <summary>Game Distribution</summary>
+          <div class="measurement-table-scroll"><div id="measurementGameDistribution"></div></div>
+        </details>
+
+        <details class="card measurement-details" open>
+          <summary>Plate Discipline</summary>
+          <div class="measurement-table-scroll"><div id="measurementPlateDiscipline"></div></div>
+        </details>
+
+        <details class="card measurement-details" open>
+          <summary>Batted Ball Profile</summary>
+          <div class="measurement-table-scroll"><div id="measurementBattedProfile"></div></div>
+        </details>
+
+        <details class="card measurement-details">
+          <summary>Pitch and Count Breakdowns</summary>
+          <div class="measurement-stack">
+            <div class="measurement-table-scroll"><div id="measurementCountBreakdown"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementPitchTypeBreakdown"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementVelocityBandBreakdown"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementCourseBreakdown"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementQualityBreakdowns"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementQualityBreakdowns"></div></div>
+          </div>
+        </details>
+
+        <details class="card measurement-details">
+          <summary>EV/LA and Outcome Breakdowns</summary>
+          <div class="measurement-stack">
+            <div class="measurement-table-scroll"><div id="measurementEvBandBreakdown"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementLaBandBreakdown"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementOutcomeBreakdowns"></div></div>
+          </div>
+        </details>
+
+        <details class="card measurement-details">
+          <summary>Smoothing Percentiles</summary>
+          <div class="measurement-table-scroll"><div id="measurementSmoothingPercentiles"></div></div>
+        </details>
+
+        <details class="card measurement-details">
+          <summary>Player and Pitcher Distributions</summary>
+          <div class="measurement-stack">
+            <div class="measurement-table-scroll"><div id="measurementPlayers"></div></div>
+            <div class="measurement-table-scroll"><div id="measurementPitchers"></div></div>
+          </div>
+        </details>
+
+        <details class="card measurement-details">
+          <summary>Definitions and Model Limitations</summary>
+          <div id="measurementLimitations"></div>
+        </details>
+
         <section class="card">
           <h3 class="panel-title">8. 異常診断</h3>
           <div class="measurement-diagnostic-grid">
@@ -1333,6 +1403,6 @@
     </section>
   </div>
 
-  <script type="module" src="./main.js?v=codex9-1"></script>
+  <script type="module" src="./main.js?v=codex10-1"></script>
 </body>
 </html>

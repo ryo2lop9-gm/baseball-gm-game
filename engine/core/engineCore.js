@@ -48,6 +48,15 @@ function emitLastPitchPatch(options, patch) {
   options.onLastPitchPatch(patch);
 }
 
+function emitPitchMeasurement(options, event) {
+  if (typeof options?.onPitchMeasurement !== "function") return;
+  options.onPitchMeasurement(event);
+}
+
+function getEntityKey(entity, fallback) {
+  return entity?.profile?.id || entity?.id || fallback;
+}
+
 // qoc is a derived label carried into logs/analysis only.
 // The contact resolver always chooses outcomes from the generated EV/LA.
 function resolveBattedBallResult(
@@ -62,7 +71,7 @@ function resolveBattedBallResult(
   const side = currentSide(state);
   const pitchVelocity = options?.pitchVelocity ?? null;
 
-  resolveContactResult({
+  return resolveContactResult({
     state,
     batter,
     side,
@@ -103,6 +112,9 @@ export function createFastSimulationOptions(runtime = {}) {
   if (typeof runtime.onBattedBallMeasurement === "function") {
     options.onBattedBallMeasurement = runtime.onBattedBallMeasurement;
   }
+  if (typeof runtime.onPitchMeasurement === "function") {
+    options.onPitchMeasurement = runtime.onPitchMeasurement;
+  }
 
   return options;
 }
@@ -122,6 +134,12 @@ export function stepPitchMutable(state, rawOptions = {}) {
   const pitcher = defensePitcher(state);
   const pitcherUsage = defensePitcherUsage(state);
   const side = currentSide(state);
+  const fieldingSide = defenseSide(state);
+  const lineup = side === "away" ? state.awayTeam.lineup : state.homeTeam.lineup;
+  const lineupIndex = state.battingIndex[side] % lineup.length;
+  const ballsBefore = state.balls;
+  const strikesBefore = state.strikes;
+  const scoreBefore = Number(state.score?.[side]) || 0;
   const outsBefore = state.outs;
 
   if (pitcherUsage) pitcherUsage.pitches += 1;
@@ -167,6 +185,50 @@ export function stepPitchMutable(state, rawOptions = {}) {
   });
 
   options.pitchVelocity = pitchVelocity;
+  const defenseTeam = fieldingSide === "away" ? state.awayTeam : state.homeTeam;
+  const startingPitcher = defenseTeam?.startingPitcher;
+  const isStartingPitcher =
+    getEntityKey(pitcher, pitcher?.name) ===
+    getEntityKey(startingPitcher, startingPitcher?.name);
+  const shouldMeasurePitch =
+    typeof options.onPitchMeasurement === "function" ||
+    typeof options.onBattedBallMeasurement === "function";
+  options.pitchMeasurementContext = shouldMeasurePitch
+    ? {
+        battingSide: side,
+        defenseSide: fieldingSide,
+        batterKey: getEntityKey(batter, `${side}:lineup:${lineupIndex}`),
+        batterName: batter?.name || "-",
+        batterRatings: batter?.ratings || {},
+        lineupIndex,
+        pitcherKey: getEntityKey(
+          pitcher,
+          `${fieldingSide}:pitcher:${pitcher?.name || "unknown"}`
+        ),
+        pitcherName: pitcher?.name || "-",
+        pitcherRole: isStartingPitcher ? "starter" : "reliever",
+        pitcherRatings: pitcher?.ratings || {},
+        pitchMix: pitcher?.pitchMix || {},
+        ballsBefore,
+        strikesBefore,
+        inning: state.inning,
+        half: state.half,
+        outsBefore,
+        pitchType,
+        pitchVelocity,
+        baseCourse,
+        course,
+        isStrike,
+        swung,
+        strikeType,
+        ballType,
+        obviousBall,
+        edgeBall,
+        chaseableBall,
+        isMistake,
+        drift,
+      }
+    : null;
 
   emitLastPitchPatch(options, {
     pitchType,
@@ -204,7 +266,7 @@ export function stepPitchMutable(state, rawOptions = {}) {
     drift: drift ?? 0,
   });
 
-  resolvePlateAppearanceResult({
+  const pitchResolution = resolvePlateAppearanceResult({
     state,
     batter,
     side,
@@ -245,6 +307,17 @@ export function stepPitchMutable(state, rawOptions = {}) {
       }),
     resolveBattedBallResult,
   });
+
+  if (typeof options.onPitchMeasurement === "function") {
+    emitPitchMeasurement(options, {
+      ...options.pitchMeasurementContext,
+      madeContact: Boolean(pitchResolution?.madeContact),
+      pitchResult: pitchResolution?.pitchResult || "unknown",
+      paResult: pitchResolution?.paResult || null,
+      strikeoutType: pitchResolution?.strikeoutType || null,
+      runsScored: Math.max(0, (Number(state.score?.[side]) || 0) - scoreBefore),
+    });
+  }
 
   const deltaOuts = Math.max(0, state.outs - outsBefore);
   if (pitcherUsage) pitcherUsage.outsRecorded += deltaOuts;

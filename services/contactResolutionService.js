@@ -144,26 +144,59 @@ export function resolveContactResult({
           : roll < tripleCut
             ? "triple"
             : "homeRun";
-
-  emitBattedBallMeasurement(options, {
-    side,
-    exitVelocity: battedBall.exitVelocity,
-    launchAngle: battedBall.launchAngle,
-    qoc,
-    evLaKey: outcomeModel.key,
-    source: outcomeModel.source,
-    sampleQuality: outcomeModel.sampleQuality,
-    neighborMode: outcomeModel.smoothing?.neighborMode ?? null,
-    expansionLevel: outcomeModel.smoothing?.expansionLevel ?? null,
-    targetBattedBalls: outcomeModel.smoothing?.targetBattedBalls ?? 0,
-    targetWeight: outcomeModel.smoothing?.targetWeight ?? 0,
-    neighborEffectiveSampleSize:
-      outcomeModel.smoothing?.neighborEffectiveSampleSize ?? 0,
-    physicalConstraints: [
-      ...(outcomeModel.smoothing?.physicalConstraints || []),
-    ],
-    outcome,
-  });
+  const pitchContext = options?.pitchMeasurementContext || {};
+  const smoothing = outcomeModel.smoothing || {};
+  const emitOutcomeMeasurement = (runsScored) =>
+    emitBattedBallMeasurement(options, {
+      side,
+      battingSide: pitchContext.battingSide || side,
+      defenseSide: pitchContext.defenseSide ?? null,
+      batterKey: pitchContext.batterKey ?? null,
+      batterName: pitchContext.batterName || batter?.name || "-",
+      batterRatings: pitchContext.batterRatings || null,
+      lineupIndex: Number.isInteger(pitchContext.lineupIndex)
+        ? pitchContext.lineupIndex
+        : null,
+      pitcherKey: pitchContext.pitcherKey ?? null,
+      pitcherName: pitchContext.pitcherName ?? null,
+      pitchType: pitchContext.pitchType || pitchType || "unknown",
+      pitchVelocity: Number.isFinite(Number(pitchVelocity))
+        ? Number(pitchVelocity)
+        : null,
+      course: pitchContext.course || course || "unknown",
+      isStrike:
+        typeof pitchContext.isStrike === "boolean"
+          ? pitchContext.isStrike
+          : null,
+      ballsBefore: Number.isInteger(pitchContext.ballsBefore)
+        ? pitchContext.ballsBefore
+        : null,
+      strikesBefore: Number.isInteger(pitchContext.strikesBefore)
+        ? pitchContext.strikesBefore
+        : null,
+      runsScored,
+      exitVelocity: battedBall.exitVelocity,
+      launchAngle: battedBall.launchAngle,
+      qoc,
+      evLaKey: outcomeModel.key,
+      source: outcomeModel.source,
+      sampleQuality: outcomeModel.sampleQuality,
+      neighborMode: smoothing.neighborMode ?? null,
+      expansionLevel: smoothing.expansionLevel ?? null,
+      targetBattedBalls: smoothing.targetBattedBalls ?? 0,
+      targetWeight: smoothing.targetWeight ?? 0,
+      neighborEffectiveSampleSize:
+        smoothing.neighborEffectiveSampleSize ?? 0,
+      neighborCount: smoothing.neighborCount ?? null,
+      weightedNeighborBattedBalls:
+        smoothing.weightedNeighborBattedBalls ?? null,
+      effectivePriorStrength: smoothing.effectivePriorStrength ?? null,
+      nearestDistanceSquared: smoothing.nearestDistanceSquared ?? null,
+      nearestEvDistance: smoothing.nearestEvDistance ?? null,
+      nearestLaDistance: smoothing.nearestLaDistance ?? null,
+      physicalConstraints: [...(smoothing.physicalConstraints || [])],
+      outcome,
+    });
 
   if (roll < outCut) {
     state.outs += 1;
@@ -181,9 +214,10 @@ export function resolveContactResult({
         pitchType
       )}を${qoc}で凡打。${battedBallSuffix}`
     );
+    emitOutcomeMeasurement(0);
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
-    return;
+    return { outcome, runsScored: 0 };
   }
 
   if (roll < singleCut) {
@@ -203,12 +237,13 @@ export function resolveContactResult({
         runs > 0 ? `${runs}点` : ""
       }${battedBallSuffix}`
     );
+    emitOutcomeMeasurement(runs);
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
     maybeEndGameMidInning(state, {
       emitLog: (text) => emitLog(options, text),
     });
-    return;
+    return { outcome, runsScored: runs };
   }
 
   if (roll < doubleCut) {
@@ -230,12 +265,13 @@ export function resolveContactResult({
         runs > 0 ? `${runs}点` : ""
       }${battedBallSuffix}`
     );
+    emitOutcomeMeasurement(runs);
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
     maybeEndGameMidInning(state, {
       emitLog: (text) => emitLog(options, text),
     });
-    return;
+    return { outcome, runsScored: runs };
   }
 
   if (roll < tripleCut) {
@@ -257,12 +293,13 @@ export function resolveContactResult({
         runs > 0 ? `${runs}点` : ""
       }${battedBallSuffix}`
     );
+    emitOutcomeMeasurement(runs);
     moveToNextBatter(state);
     finishPlateAppearanceState(state, options);
     maybeEndGameMidInning(state, {
       emitLog: (text) => emitLog(options, text),
     });
-    return;
+    return { outcome, runsScored: runs };
   }
 
   state.box[side].hits += 1;
@@ -283,9 +320,11 @@ export function resolveContactResult({
       pitchType
     )}を${qoc}で本塁打。${runs}点${battedBallSuffix}`
   );
+  emitOutcomeMeasurement(runs);
   moveToNextBatter(state);
   finishPlateAppearanceState(state, options);
   maybeEndGameMidInning(state, {
     emitLog: (text) => emitLog(options, text),
   });
+  return { outcome, runsScored: runs };
 }

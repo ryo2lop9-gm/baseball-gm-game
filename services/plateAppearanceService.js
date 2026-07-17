@@ -205,6 +205,7 @@ export function resolvePlateAppearanceResult({
 
       if (calledStrike) {
         state.strikes += 1;
+        const isStrikeout = state.strikes >= 3;
 
         emitLog(
           options,
@@ -225,7 +226,7 @@ export function resolvePlateAppearanceResult({
           })}`
         );
 
-        if (state.strikes >= 3) {
+        if (isStrikeout) {
           state.box[side].strikeouts += 1;
           addStrikeoutStat(batter);
           batter.gameStats.AB += 1;
@@ -245,10 +246,16 @@ export function resolvePlateAppearanceResult({
           finishPlateAppearanceState(state, options);
         }
 
-        return;
+        return {
+          madeContact: false,
+          pitchResult: "called_strike",
+          paResult: isStrikeout ? "strikeout" : null,
+          strikeoutType: isStrikeout ? "looking" : null,
+        };
       }
 
       state.balls += 1;
+      const isWalk = state.balls >= 4;
 
       emitLastPitchPatch(options, {
         resultText: "ボール判定",
@@ -271,7 +278,7 @@ export function resolvePlateAppearanceResult({
         })}`
       );
 
-      if (state.balls >= 4) {
+      if (isWalk) {
         state.box[side].walks += 1;
         const runs = applyWalkAdvance(state, batter);
         addWalkStat(batter, runs);
@@ -293,10 +300,16 @@ export function resolvePlateAppearanceResult({
         });
       }
 
-      return;
+      return {
+        madeContact: false,
+        pitchResult: "called_ball_from_nominal_strike",
+        paResult: isWalk ? "walk" : null,
+        strikeoutType: null,
+      };
     }
 
     state.balls += 1;
+    const isWalk = state.balls >= 4;
 
     emitLog(
       options,
@@ -309,7 +322,7 @@ export function resolvePlateAppearanceResult({
       })}`
     );
 
-    if (state.balls >= 4) {
+    if (isWalk) {
       state.box[side].walks += 1;
       const runs = applyWalkAdvance(state, batter);
       addWalkStat(batter, runs);
@@ -331,7 +344,12 @@ export function resolvePlateAppearanceResult({
       });
     }
 
-    return;
+    return {
+      madeContact: false,
+      pitchResult: "called_ball",
+      paResult: isWalk ? "walk" : null,
+      strikeoutType: null,
+    };
   }
 
   const rawContactRate = isStrike ? probs.zContactRate : probs.oContactRate;
@@ -353,6 +371,7 @@ export function resolvePlateAppearanceResult({
 
   if (!madeContact) {
     state.strikes += 1;
+    const isStrikeout = state.strikes >= 3;
 
     emitLog(
       options,
@@ -371,7 +390,7 @@ export function resolvePlateAppearanceResult({
       })}`
     );
 
-    if (state.strikes >= 3) {
+    if (isStrikeout) {
       state.box[side].strikeouts += 1;
       addStrikeoutStat(batter);
       batter.gameStats.AB += 1;
@@ -391,7 +410,12 @@ export function resolvePlateAppearanceResult({
       finishPlateAppearanceState(state, options);
     }
 
-    return;
+    return {
+      madeContact: false,
+      pitchResult: "swinging_strike",
+      paResult: isStrikeout ? "strikeout" : null,
+      strikeoutType: isStrikeout ? "swinging" : null,
+    };
   }
 
   const isFoul = random() < (isStrike ? 0.26 : 0.18);
@@ -420,7 +444,12 @@ export function resolvePlateAppearanceResult({
       })}`
     );
 
-    return;
+    return {
+      madeContact: true,
+      pitchResult: "foul",
+      paResult: null,
+      strikeoutType: null,
+    };
   }
 
   const battedBall = generateFairBattedBall({
@@ -439,7 +468,7 @@ export function resolvePlateAppearanceResult({
     qoc: battedBall.qoc,
   });
 
-  resolveBattedBallResult(
+  const contactResult = resolveBattedBallResult(
     state,
     batter,
     course,
@@ -448,4 +477,11 @@ export function resolvePlateAppearanceResult({
     options,
     battedBall
   );
+
+  return {
+    madeContact: true,
+    pitchResult: "in_play",
+    paResult: contactResult?.outcome || null,
+    strikeoutType: null,
+  };
 }

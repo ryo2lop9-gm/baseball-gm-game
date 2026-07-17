@@ -4,9 +4,18 @@ import {
 } from "../../engine/core/engineCore.js";
 import { createInitialSimState } from "../../state/gameState.js";
 import { createSeededRandom, normalizeSeed } from "../seededRandomService.js";
+import {
+  commitAdvancedMeasurementGame,
+  createAdvancedMeasurementAccumulator,
+  finalizeAdvancedMeasurement,
+  getRawPitchMeasurementValue,
+  recordAdvancedBattedBallMeasurement,
+  recordPitchMeasurement,
+} from "./measurementAdvancedService.js";
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 2;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -56,6 +65,7 @@ function zeroMap(keys) {
 
 function createTeamTotals() {
   return {
+    G: 0,
     wins: 0,
     runs: 0,
     PA: 0,
@@ -66,6 +76,11 @@ function createTeamTotals() {
     HR: 0,
     BB: 0,
     K: 0,
+    swingingK: 0,
+    lookingK: 0,
+    outsInPlay: 0,
+    R: 0,
+    RBI: 0,
   };
 }
 
@@ -123,6 +138,7 @@ export function createEmptyMeasurementAccumulator() {
     battedBallMetrics: createBattedBallTotals(),
     diagnostics: createDiagnostics(),
     simulationErrors: [],
+    advanced: createAdvancedMeasurementAccumulator(),
   };
 }
 
@@ -134,6 +150,7 @@ export function createGameMeasurementAccumulator() {
     },
     battedBallMetrics: createBattedBallTotals(),
     diagnostics: createDiagnostics(),
+    advanced: createAdvancedMeasurementAccumulator(),
   };
 }
 
@@ -250,7 +267,13 @@ export function recordBattedBallMeasurement(gameAccumulator, event) {
     gameAccumulator.qoc[side][event.qoc] += 1;
   }
 
+  recordAdvancedBattedBallMeasurement(gameAccumulator.advanced, event);
+
   return true;
+}
+
+export function recordPitchMeasurementEvent(gameAccumulator, event) {
+  return recordPitchMeasurement(gameAccumulator.advanced, event);
 }
 
 function addMap(target, source) {
@@ -303,7 +326,9 @@ function mergeBattedBallTotals(target, source) {
 function addLineupStats(target, lineup) {
   for (const player of lineup || []) {
     const stats = player?.gameStats || {};
-    for (const key of ["PA", "AB", "H", "doubles", "triples", "HR", "BB", "K"]) {
+    for (const key of [
+      "PA", "AB", "H", "doubles", "triples", "HR", "BB", "K", "R", "RBI",
+    ]) {
       target[key] += Number(stats[key]) || 0;
     }
   }
@@ -321,10 +346,24 @@ export function commitCompletedMeasurementGame(
   }
 
   accumulator.completedGames += 1;
+  accumulator.teams.away.G += 1;
+  accumulator.teams.home.G += 1;
   accumulator.teams.away.runs += Number(gameState.score.away) || 0;
   accumulator.teams.home.runs += Number(gameState.score.home) || 0;
   addLineupStats(accumulator.teams.away, gameState.awayTeam?.lineup);
   addLineupStats(accumulator.teams.home, gameState.homeTeam?.lineup);
+  for (const side of ["away", "home"]) {
+    const pitch = gameAccumulator.advanced.pitchBySide[side];
+    accumulator.teams[side].swingingK += getRawPitchMeasurementValue(
+      pitch,
+      "swingingK"
+    );
+    accumulator.teams[side].lookingK += getRawPitchMeasurementValue(
+      pitch,
+      "lookingK"
+    );
+    accumulator.teams[side].outsInPlay += Number(gameState.box?.[side]?.outsInPlay) || 0;
+  }
 
   if (gameState.score.away > gameState.score.home) {
     accumulator.teams.away.wins += 1;
@@ -339,6 +378,11 @@ export function commitCompletedMeasurementGame(
     gameAccumulator.battedBallMetrics
   );
   addMap(accumulator.diagnostics, gameAccumulator.diagnostics);
+  commitAdvancedMeasurementGame(
+    accumulator.advanced,
+    gameAccumulator.advanced,
+    gameState
+  );
 }
 
 function safeDivide(numerator, denominator) {
@@ -350,20 +394,28 @@ function finalizeTeam(raw, completedGames, combined = false) {
   const totalBases =
     singles + raw.doubles * 2 + raw.triples * 3 + raw.HR * 4;
   const gameDenominator = combined ? completedGames * 2 : completedGames;
+  const xbh = raw.doubles + raw.triples + raw.HR;
+  const avg = safeDivide(raw.H, raw.AB);
+  const obp = safeDivide(raw.H + raw.BB, raw.PA);
+  const slg = safeDivide(totalBases, raw.AB);
 
   return {
     ...raw,
     singles,
     totalBases,
+    XBH: xbh,
     averageRuns: safeDivide(raw.runs, gameDenominator),
-    AVG: safeDivide(raw.H, raw.AB),
-    OBP: safeDivide(raw.H + raw.BB, raw.PA),
-    SLG: safeDivide(totalBases, raw.AB),
-    OPS:
-      safeDivide(raw.H + raw.BB, raw.PA) + safeDivide(totalBases, raw.AB),
+    AVG: avg,
+    OBP: obp,
+    SLG: slg,
+    OPS: obp + slg,
+    ISO: slg - avg,
+    BABIP: safeDivide(raw.H - raw.HR, raw.AB - raw.K - raw.HR),
     BBPct: safeDivide(raw.BB, raw.PA),
     KPct: safeDivide(raw.K, raw.PA),
     HRPct: safeDivide(raw.HR, raw.PA),
+    BBPerK: safeDivide(raw.BB, raw.K),
+    XBHPerH: safeDivide(xbh, raw.H),
   };
 }
 
@@ -422,8 +474,57 @@ export function finalizeMeasurementSummary(accumulator, run) {
     accumulator.teams.home
   );
   const metrics = accumulator.battedBallMetrics;
+  const results = {
+    away: finalizeTeam(accumulator.teams.away, accumulator.completedGames),
+    home: finalizeTeam(accumulator.teams.home, accumulator.completedGames),
+    combined: finalizeTeam(combinedRaw, accumulator.completedGames, true),
+  };
+  const qoc = finalizeQoC(accumulator);
+  const battedBallMetrics = {
+    fairBattedBalls,
+    averageExitVelocity: safeDivide(metrics.exitVelocitySum, fairBattedBalls),
+    averageLaunchAngle: safeDivide(metrics.launchAngleSum, fairBattedBalls),
+    exitVelocityMin: metrics.exitVelocityMin ?? 0,
+    exitVelocityMax: metrics.exitVelocityMax ?? 0,
+    launchAngleMin: metrics.launchAngleMin ?? 0,
+    launchAngleMax: metrics.launchAngleMax ?? 0,
+    negativeLACount: metrics.negativeLACount,
+    negativeLAPct: safeDivide(metrics.negativeLACount, fairBattedBalls),
+    averageTargetWeight: safeDivide(metrics.targetWeightSum, fairBattedBalls),
+    averageTargetBattedBalls: safeDivide(
+      metrics.targetBattedBallsSum,
+      fairBattedBalls
+    ),
+    averageNeighborEffectiveSampleSize: safeDivide(
+      metrics.neighborEffectiveSampleSizeSum,
+      fairBattedBalls
+    ),
+    rawSums: {
+      exitVelocity: metrics.exitVelocitySum,
+      launchAngle: metrics.launchAngleSum,
+      targetWeight: metrics.targetWeightSum,
+      targetBattedBalls: metrics.targetBattedBallsSum,
+      neighborEffectiveSampleSize: metrics.neighborEffectiveSampleSizeSum,
+    },
+    source: finalizeCounterMap(metrics.source, fairBattedBalls),
+    sampleQuality: finalizeCounterMap(metrics.sampleQuality, fairBattedBalls),
+    neighborMode: finalizeCounterMap(metrics.neighborMode, fairBattedBalls),
+    physicalConstraints: structuredClone(metrics.physicalConstraints),
+    neighborModeOutcomes: Object.fromEntries(
+      Object.entries(metrics.neighborModeOutcomes).map(([mode, raw]) => [
+        mode,
+        finalizeOutcomeMap(raw),
+      ])
+    ),
+  };
+  const advanced = finalizeAdvancedMeasurement(accumulator.advanced, {
+    results,
+    qoc,
+    battedBallMetrics,
+  });
 
   return {
+    reportSchemaVersion: MEASUREMENT_SUMMARY_SCHEMA_VERSION,
     status: run.status,
     run: {
       seed: normalizeSeed(run.seed),
@@ -436,50 +537,17 @@ export function finalizeMeasurementSummary(accumulator, run) {
         Math.max(0, Number(run.elapsedMs) || 0) / 1000
       ),
     },
-    results: {
-      away: finalizeTeam(accumulator.teams.away, accumulator.completedGames),
-      home: finalizeTeam(accumulator.teams.home, accumulator.completedGames),
-      combined: finalizeTeam(combinedRaw, accumulator.completedGames, true),
-    },
-    qoc: finalizeQoC(accumulator),
-    battedBallMetrics: {
-      fairBattedBalls,
-      averageExitVelocity: safeDivide(metrics.exitVelocitySum, fairBattedBalls),
-      averageLaunchAngle: safeDivide(metrics.launchAngleSum, fairBattedBalls),
-      exitVelocityMin: metrics.exitVelocityMin ?? 0,
-      exitVelocityMax: metrics.exitVelocityMax ?? 0,
-      launchAngleMin: metrics.launchAngleMin ?? 0,
-      launchAngleMax: metrics.launchAngleMax ?? 0,
-      negativeLACount: metrics.negativeLACount,
-      negativeLAPct: safeDivide(metrics.negativeLACount, fairBattedBalls),
-      averageTargetWeight: safeDivide(metrics.targetWeightSum, fairBattedBalls),
-      averageTargetBattedBalls: safeDivide(
-        metrics.targetBattedBallsSum,
-        fairBattedBalls
-      ),
-      averageNeighborEffectiveSampleSize: safeDivide(
-        metrics.neighborEffectiveSampleSizeSum,
-        fairBattedBalls
-      ),
-      rawSums: {
-        exitVelocity: metrics.exitVelocitySum,
-        launchAngle: metrics.launchAngleSum,
-        targetWeight: metrics.targetWeightSum,
-        targetBattedBalls: metrics.targetBattedBallsSum,
-        neighborEffectiveSampleSize: metrics.neighborEffectiveSampleSizeSum,
-      },
-      source: finalizeCounterMap(metrics.source, fairBattedBalls),
-      sampleQuality: finalizeCounterMap(metrics.sampleQuality, fairBattedBalls),
-      neighborMode: finalizeCounterMap(metrics.neighborMode, fairBattedBalls),
-      physicalConstraints: structuredClone(metrics.physicalConstraints),
-      neighborModeOutcomes: Object.fromEntries(
-        Object.entries(metrics.neighborModeOutcomes).map(([mode, raw]) => [
-          mode,
-          finalizeOutcomeMap(raw),
-        ])
-      ),
-    },
-    diagnostics: { ...accumulator.diagnostics },
+    results,
+    qoc,
+    battedBallMetrics,
+    gameDistribution: advanced.gameDistribution,
+    plateDiscipline: advanced.plateDiscipline,
+    battingProfiles: advanced.battingProfiles,
+    players: advanced.players,
+    pitchers: advanced.pitchers,
+    breakdowns: advanced.breakdowns,
+    smoothingDiagnostics: advanced.smoothingDiagnostics,
+    diagnostics: { ...accumulator.diagnostics, ...advanced.diagnostics },
     simulationErrors: structuredClone(accumulator.simulationErrors),
   };
 }
@@ -543,6 +611,8 @@ export async function runMeasurementBatches({
         const state = createGameState(awayTeam, homeTeam);
         const options = createFastSimulationOptions({
           random,
+          onPitchMeasurement: (event) =>
+            recordPitchMeasurementEvent(gameAccumulator, event),
           onBattedBallMeasurement: (event) =>
             recordBattedBallMeasurement(gameAccumulator, event),
         });
