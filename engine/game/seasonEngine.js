@@ -5,6 +5,9 @@ import {
 } from "../core/engineCore.js";
 import { createEmptyVelocityBandStats } from "../../services/velocityBandStatsService.js";
 
+const MAX_SIMULATION_ERRORS = 10;
+const MAX_CONSECUTIVE_FAILURES = 10;
+
 function emptyQoC() {
   return {
     Weak: 0,
@@ -207,10 +210,53 @@ function createSimGameStateFromTeams(awayTeam, homeTeam) {
   );
 }
 
-export function simulateSeason(awayTeam, homeTeam, gameCount) {
-  const safeGameCount = Math.max(0, Number(gameCount || 0));
+function addCompletedGameToSeason(season, result) {
+  if (!result?.box?.away || !result?.box?.home || !result?.score) {
+    const error = new Error("Simulation returned an invalid game result.");
+    error.code = "INVALID_SIMULATION_RESULT";
+    throw error;
+  }
+
+  addTeamBox(season.away, result.box.away);
+  addTeamBox(season.home, result.box.home);
+
+  addPlayerSeasonStats(season.awayPlayers, result.awayTeam?.lineup || []);
+  addPlayerSeasonStats(season.homePlayers, result.homeTeam?.lineup || []);
+
+  if (result.score.away > result.score.home) {
+    season.awayWins += 1;
+  } else if (result.score.home > result.score.away) {
+    season.homeWins += 1;
+  }
+}
+
+function recordSimulationError(season, gameIndex, error) {
+  season.failedGames += 1;
+
+  if (season.simulationErrors.length >= MAX_SIMULATION_ERRORS) return;
+
+  season.simulationErrors.push({
+    gameIndex,
+    code: error?.code || "SIMULATION_ERROR",
+    message: error?.message || String(error),
+  });
+}
+
+export function simulateSeason(
+  awayTeam,
+  homeTeam,
+  gameCount,
+  runtime = {}
+) {
+  const safeGameCount = Math.floor(Math.max(0, Number(gameCount || 0)));
   const season = {
     games: safeGameCount,
+    requestedGames: safeGameCount,
+    completedGames: 0,
+    failedGames: 0,
+    simulationErrors: [],
+    aborted: false,
+    abortReason: null,
     awayName: awayTeam.name,
     homeName: homeTeam.name,
     awayWins: 0,
@@ -222,29 +268,41 @@ export function simulateSeason(awayTeam, homeTeam, gameCount) {
   };
 
   const fastOptions = createFastSimulationOptions();
+  const createGameState = runtime.createGameState || createSimGameStateFromTeams;
+  const runGame = runtime.simulateGame || simulateGameMutable;
+  let consecutiveFailures = 0;
 
   for (let i = 0; i < safeGameCount; i += 1) {
-    const simState = createSimGameStateFromTeams(awayTeam, homeTeam);
-    const result = simulateGameMutable(simState, fastOptions);
+    try {
+      const simState = createGameState(awayTeam, homeTeam);
+      const result = runGame(simState, fastOptions);
 
-    addTeamBox(season.away, result.box.away);
-    addTeamBox(season.home, result.box.home);
+      addCompletedGameToSeason(season, result);
+      season.completedGames += 1;
+      consecutiveFailures = 0;
+    } catch (error) {
+      recordSimulationError(season, i + 1, error);
+      consecutiveFailures += 1;
 
-    addPlayerSeasonStats(season.awayPlayers, result.awayTeam.lineup);
-    addPlayerSeasonStats(season.homePlayers, result.homeTeam.lineup);
-
-    if (result.score.away > result.score.home) {
-      season.awayWins += 1;
-    } else if (result.score.home > result.score.away) {
-      season.homeWins += 1;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        season.aborted = true;
+        season.abortReason = `${MAX_CONSECUTIVE_FAILURES}試合連続でシミュレーションに失敗したため中止しました。`;
+        break;
+      }
     }
   }
 
   syncTeamSummaryFromPlayerTotals(season.away, season.awayPlayers);
   syncTeamSummaryFromPlayerTotals(season.home, season.homePlayers);
 
-  season.awayRPG = safeGameCount > 0 ? (season.away.runs / safeGameCount).toFixed(2) : "0.00";
-  season.homeRPG = safeGameCount > 0 ? (season.home.runs / safeGameCount).toFixed(2) : "0.00";
+  season.awayRPG =
+    season.completedGames > 0
+      ? (season.away.runs / season.completedGames).toFixed(2)
+      : "0.00";
+  season.homeRPG =
+    season.completedGames > 0
+      ? (season.home.runs / season.completedGames).toFixed(2)
+      : "0.00";
 
   season.awayQoCPct = qocPercentMap(season.away.qoc);
   season.homeQoCPct = qocPercentMap(season.home.qoc);

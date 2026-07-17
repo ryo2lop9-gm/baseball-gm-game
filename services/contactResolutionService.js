@@ -1,4 +1,3 @@
-import { getHitTypeProbabilities } from "../config/hitOutcomeConfig.js";
 import { getPitchTypeLabel } from "../config/pitchConfig.js";
 import { getEvLaOutcomeProbabilities } from "./evLaOutcomeService.js";
 import { getLoadedEvLaLookup } from "./evLaLookupStore.js";
@@ -28,27 +27,56 @@ function formatBattedBallSuffix(battedBall, outcomeSource, sampleQuality, evLaKe
   return ` (${parts.join(" / ")})`;
 }
 
-function resolveOutcomeModel(qoc, battedBall) {
-  const lookup = getLoadedEvLaLookup();
+function createResolutionError(code, message, context) {
+  const error = new Error(message);
+  error.code = code;
+  error.context = context;
+  return error;
+}
 
-  // Outcomes are resolved from EV/LA whenever a batted ball and lookup are available.
-  // QoC remains a derived label for analysis/logging, not the result driver.
-  if (lookup && battedBall) {
-    return getEvLaOutcomeProbabilities({
-      exitVelocity: battedBall.exitVelocity,
-      launchAngle: battedBall.launchAngle,
-      lookup,
-    });
+function buildResolutionContext({ state, batter, pitchType, course }) {
+  return {
+    batter: batter?.name || batter?.id || "unknown",
+    pitchType: pitchType || "unknown",
+    course: course || "unknown",
+    inning: Number(state?.inning) || null,
+    half: state?.half || null,
+    balls: Number.isFinite(Number(state?.balls)) ? Number(state.balls) : null,
+    strikes: Number.isFinite(Number(state?.strikes))
+      ? Number(state.strikes)
+      : null,
+  };
+}
+
+function resolveOutcomeModel({ state, batter, pitchType, course, battedBall }) {
+  const context = buildResolutionContext({ state, batter, pitchType, course });
+  const hasValidBattedBall =
+    battedBall &&
+    Number.isFinite(Number(battedBall.exitVelocity)) &&
+    Number.isFinite(Number(battedBall.launchAngle));
+
+  if (!hasValidBattedBall) {
+    throw createResolutionError(
+      "BATTED_BALL_MISSING",
+      `Fair-ball EV/LA is missing for ${context.batter}.`,
+      context
+    );
   }
 
-  // Legacy safety net only: this preserves old-engine behavior if the EV/LA
-  // lookup is unavailable, but normal fair-ball outcomes should not depend on QoC.
-  return {
-    key: null,
-    source: "qoc_fallback",
-    sampleQuality: "legacy",
-    probabilities: getHitTypeProbabilities(qoc),
-  };
+  const lookup = getLoadedEvLaLookup();
+  if (!lookup) {
+    throw createResolutionError(
+      "EV_LA_LOOKUP_NOT_READY",
+      `EV/LA lookup is not ready for ${context.batter}.`,
+      context
+    );
+  }
+
+  return getEvLaOutcomeProbabilities({
+    exitVelocity: battedBall.exitVelocity,
+    launchAngle: battedBall.launchAngle,
+    lookup,
+  });
 }
 
 export function resolveContactResult({
@@ -56,6 +84,7 @@ export function resolveContactResult({
   batter,
   side,
   pitchType,
+  course,
   pitchVelocity,
   qoc,
   battedBall,
@@ -71,7 +100,13 @@ export function resolveContactResult({
   emitLog,
   emitLastPitchPatch,
 }) {
-  const outcomeModel = resolveOutcomeModel(qoc, battedBall);
+  const outcomeModel = resolveOutcomeModel({
+    state,
+    batter,
+    pitchType,
+    course,
+    battedBall,
+  });
   const probs = outcomeModel.probabilities;
   const roll = random();
   const battedBallSuffix = formatBattedBallSuffix(
@@ -82,7 +117,7 @@ export function resolveContactResult({
   );
 
   // qoc is recorded for analysis/logging only.
-  // Outcomes above come from EV/LA lookup, interpolation, or final fallback.
+  // Outcomes above come from EV/LA smoothing, neighbors, or emergency fallback.
   addQoCToBox(state, qoc);
   emitLastPitchPatch(options, {
     outcomeSource: outcomeModel.source,

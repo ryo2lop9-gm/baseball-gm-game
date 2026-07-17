@@ -1,3 +1,5 @@
 import { bootstrapApp } from "./bootstrap/appBootstrap.js";
 
-bootstrapApp();
+bootstrapApp().catch((error) => {
+  console.error("Application bootstrap failed.", error);
+});

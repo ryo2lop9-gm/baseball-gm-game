@@ -52,9 +52,9 @@ function emitLastPitchPatch(options, patch) {
   options.onLastPitchPatch(patch);
 }
 
-// Historical name: qoc is now a derived label carried into logs/analysis.
-// The contact resolver chooses outcomes from EV/LA lookup whenever battedBall exists.
-function resolveQoCResult(
+// qoc is a derived label carried into logs/analysis only.
+// The contact resolver always chooses outcomes from the generated EV/LA.
+function resolveBattedBallResult(
   state,
   batter,
   course,
@@ -71,6 +71,7 @@ function resolveQoCResult(
     batter,
     side,
     pitchType,
+    course,
     pitchVelocity,
     qoc,
     battedBall,
@@ -234,7 +235,7 @@ export function stepPitchMutable(state, rawOptions = {}) {
         emitLog,
         options: runtimeOptions,
       }),
-    resolveQoCResult,
+    resolveBattedBallResult,
   });
 
   const deltaOuts = Math.max(0, state.outs - outsBefore);

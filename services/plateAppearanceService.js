@@ -164,7 +164,7 @@ export function resolvePlateAppearanceResult({
   maybeEndGameMidInning,
   moveToNextBatter,
   finishPlateAppearanceState,
-  resolveQoCResult,
+  resolveBattedBallResult,
 }) {
   const pitchVelocity = probs?.pitchVelocity;
 
@@ -439,7 +439,7 @@ export function resolvePlateAppearanceResult({
     qoc: battedBall.qoc,
   });
 
-  resolveQoCResult(
+  resolveBattedBallResult(
     state,
     batter,
     course,

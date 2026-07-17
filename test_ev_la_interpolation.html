@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>EV/LA Interpolation Debug</title>
+  <title>EV/LA Smoothing Debug</title>
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -51,7 +51,7 @@
   </style>
 </head>
 <body>
-  <h1>EV/LA Interpolation Debug</h1>
+  <h1>EV/LA Smoothing Debug</h1>
 
   <label>
     Exit Velocity
@@ -86,12 +86,18 @@
     import { getEvLaOutcomeProbabilities } from "./services/evLaOutcomeService.js";
 
     const presets = [
-      { label: "Normal: 95, 21", exitVelocity: 95, launchAngle: 21 },
-      { label: "Weak contact: 67, 20", exitVelocity: 67, launchAngle: 20 },
-      { label: "Extreme low angle: 52, -80", exitVelocity: 52, launchAngle: -80 },
-      { label: "Extreme high angle: 118, 85", exitVelocity: 118, launchAngle: 85 },
-      { label: "Interpolated boundary: 50, -90", exitVelocity: 50, launchAngle: -90 },
+      { label: "Good: 95, 21", exitVelocity: 95, launchAngle: 21 },
+      { label: "Low sample: 67, 20", exitVelocity: 67, launchAngle: 20 },
+      { label: "Very low: 50, -90", exitVelocity: 50, launchAngle: -90 },
+      { label: "None: 118, 85", exitVelocity: 118, launchAngle: 85 },
+      { label: "Extreme low: 52, -80", exitVelocity: 52, launchAngle: -80 },
       { label: "Boundary: 120, 90", exitVelocity: 120, launchAngle: 90 },
+      {
+        label: "Emergency fallback mock",
+        exitVelocity: 95,
+        launchAngle: 21,
+        useEmptyLookup: true,
+      },
     ];
 
     const exitVelocityInput = document.getElementById("exitVelocityInput");
@@ -105,6 +111,10 @@
     function formatValue(value) {
       if (typeof value === "number") {
         return Number.isInteger(value) ? String(value) : value.toFixed(6);
+      }
+
+      if (value && typeof value === "object") {
+        return JSON.stringify(value);
       }
 
       return value ?? "-";
@@ -124,14 +134,20 @@
     }
 
     function renderResult({ exitVelocity, launchAngle, result }) {
+      const smoothing = result.smoothing || {};
+
       renderRows(summaryBody, [
         ["EV", exitVelocity],
         ["LA", launchAngle],
         ["key", result.key],
         ["source", result.source],
-        ["sampleQuality", result.sampleQuality],
-        ["neighborCount", result.neighborCount],
-        ["neighborBattedBalls", result.neighborBattedBalls],
+        ["target sampleQuality", result.sampleQuality],
+        ["target battedBalls", smoothing.targetBattedBalls],
+        ["neighborCount", smoothing.neighborCount],
+        ["weightedNeighborBattedBalls", smoothing.weightedNeighborBattedBalls],
+        ["effectivePriorStrength", smoothing.effectivePriorStrength],
+        ["reliability", smoothing.reliability],
+        ["searchRange", smoothing.searchRange],
       ]);
 
       renderRows(probabilityBody, [
@@ -154,22 +170,26 @@
 
     const lookup = await loadEvLaLookup();
 
-    window.debugEvLa = async function debugEvLa(exitVelocity, launchAngle) {
+    function runLookup(exitVelocity, launchAngle, lookupForRun) {
       const result = getEvLaOutcomeProbabilities({
         exitVelocity,
         launchAngle,
-        lookup,
+        lookup: lookupForRun,
       });
 
       console.table(result.probabilities);
       console.log(result);
       renderResult({ exitVelocity, launchAngle, result });
       return result;
+    }
+
+    window.debugEvLa = async function debugEvLa(exitVelocity, launchAngle) {
+      return runLookup(exitVelocity, launchAngle, lookup);
     };
 
-    function runFromInputs() {
+    function runFromInputs(lookupForRun = lookup) {
       const { exitVelocity, launchAngle } = readInputs();
-      window.debugEvLa(exitVelocity, launchAngle).catch((error) => {
+      Promise.resolve(runLookup(exitVelocity, launchAngle, lookupForRun)).catch((error) => {
         rawOutput.textContent = error.stack || String(error);
         console.error(error);
       });
@@ -182,7 +202,7 @@
       button.addEventListener("click", () => {
         exitVelocityInput.value = preset.exitVelocity;
         launchAngleInput.value = preset.launchAngle;
-        runFromInputs();
+        runFromInputs(preset.useEmptyLookup ? {} : lookup);
       });
       presetButtons.append(button);
     }

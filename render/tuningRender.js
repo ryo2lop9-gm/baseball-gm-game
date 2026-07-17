@@ -233,6 +233,19 @@ function buildSeasonSummaryTable(season) {
     `;
   }
 
+  const simulationStatusRows =
+    season.failedGames > 0
+      ? `
+        <tr><td>完了試合</td><td colspan="2">${season.completedGames} / ${season.requestedGames}</td></tr>
+        <tr><td>失敗試合</td><td colspan="2">${season.failedGames}</td></tr>
+        ${
+          season.aborted
+            ? `<tr><td>状態</td><td colspan="2">${season.abortReason || "中止"}</td></tr>`
+            : ""
+        }
+      `
+      : "";
+
   return `
     <table>
       <thead>
@@ -249,6 +262,7 @@ function buildSeasonSummaryTable(season) {
         <tr><td>OBP</td><td>${season.awayRates.obp}</td><td>${season.homeRates.obp}</td></tr>
         <tr><td>SLG</td><td>${season.awayRates.slg}</td><td>${season.homeRates.slg}</td></tr>
         <tr><td>OPS</td><td>${season.awayRates.ops}</td><td>${season.homeRates.ops}</td></tr>
+        ${simulationStatusRows}
       </tbody>
     </table>
   `;
@@ -678,14 +692,22 @@ export function renderTuningGameTables(state, dom) {
 }
 
 export function renderTuningSeasonTables(season, dom) {
+  const hasSimulationFailures = Boolean(season?.failedGames);
+
   if (dom.tuningSeasonHeadline) {
     dom.tuningSeasonHeadline.textContent = season
-      ? `${season.games}試合シミュレーション`
+      ? hasSimulationFailures
+        ? `${season.completedGames} / ${season.requestedGames}試合完了`
+        : `${season.games}試合シミュレーション`
       : "シーズン結果";
   }
 
   if (dom.tuningSeasonGamesValue) {
-    dom.tuningSeasonGamesValue.textContent = season ? String(season.games) : "-";
+    dom.tuningSeasonGamesValue.textContent = season
+      ? hasSimulationFailures
+        ? `${season.completedGames} / ${season.requestedGames}`
+        : String(season.games)
+      : "-";
   }
 
   if (dom.tuningSeasonRecordValue) {
