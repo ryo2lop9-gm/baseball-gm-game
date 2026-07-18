@@ -1,14 +1,14 @@
-import { getMeasurementDom } from "./measurementDom.js";
-import { renderMeasurementPage } from "../render/measurementRender.js";
+import { getMeasurementDom } from "./measurementDom.js?v=codex11-2";
+import { renderMeasurementPage } from "../render/measurementRender.js?v=codex11-2";
 import {
   MAX_MEASUREMENT_GAMES,
   normalizeMeasurementGameCount,
-} from "../services/measurement/measurementService.js";
-import { createMeasurementRunner } from "../services/measurement/measurementRunner.js";
+} from "../services/measurement/measurementService.js?v=codex11-2";
+import { createMeasurementRunner } from "../services/measurement/measurementRunner.js?v=codex11-2";
 import {
   buildMeasurementJson,
   buildMeasurementMarkdown,
-} from "../services/measurement/measurementReportService.js";
+} from "../services/measurement/measurementReportService.js?v=codex11-2";
 import {
   DEFAULT_MEASUREMENT_SEED,
   normalizeSeed,
@@ -31,6 +31,19 @@ export async function copyMeasurementText(text, clipboard = null) {
   }
 }
 
+export function createMeasurementContext(
+  rosterBundle,
+  buildCurrentTuningTeams
+) {
+  return {
+    validationPreset: {
+      id: rosterBundle?.validationPreset || "custom",
+      label: rosterBundle?.validationPresetLabel || "カスタム",
+    },
+    teams: structuredClone(buildCurrentTuningTeams(rosterBundle)),
+  };
+}
+
 export function createMeasurementPageController({
   getTuningRosterBundle,
   buildCurrentTuningTeams,
@@ -49,6 +62,7 @@ export function createMeasurementPageController({
     failedGames: 0,
     elapsedMs: 0,
     gamesPerSecond: 0,
+    validationPreset: { id: "custom", label: "カスタム" },
     teams: null,
     summary: null,
     markdown: "",
@@ -58,15 +72,16 @@ export function createMeasurementPageController({
     errorMessage: "",
   };
 
-  function getCurrentTeams() {
-    return structuredClone(
-      buildCurrentTuningTeams(getTuningRosterBundle())
+  function getCurrentContext() {
+    return createMeasurementContext(
+      getTuningRosterBundle(),
+      buildCurrentTuningTeams
     );
   }
 
   function render() {
-    if (!state.teams && dom.measurementPage) {
-      state = { ...state, teams: getCurrentTeams() };
+    if (dom.measurementPage && state.status === "idle") {
+      state = { ...state, ...getCurrentContext() };
     }
     renderMeasurementPage(state, dom);
   }
@@ -90,6 +105,7 @@ export function createMeasurementPageController({
     const reportOptions = {
       summary,
       teams: state.teams,
+      validationPreset: state.validationPreset,
       generatedAt: generatedAtFactory(),
     };
     const markdown = buildMeasurementMarkdown(reportOptions);
@@ -133,7 +149,8 @@ export function createMeasurementPageController({
     try {
       const gameCount = normalizeMeasurementGameCount(dom.gameCountInput?.value);
       const seed = normalizeSeed(dom.seedInput?.value);
-      const teams = getCurrentTeams();
+      const context = getCurrentContext();
+      const teams = context.teams;
 
       state = {
         ...state,
@@ -141,6 +158,7 @@ export function createMeasurementPageController({
         gameCount,
         requestedGames: gameCount,
         seed,
+        validationPreset: context.validationPreset,
         completedGames: 0,
         failedGames: 0,
         elapsedMs: 0,

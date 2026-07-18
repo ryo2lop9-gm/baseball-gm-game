@@ -1,4 +1,8 @@
 import { SMOOTHING_CONFIG } from "../evLaOutcomeService.js";
+import {
+  buildMeasurementReferenceComparison,
+  getMlb2025ReferenceBenchmark,
+} from "./measurementReferenceService.js";
 
 export const MEASUREMENT_REPORT_SCHEMA_VERSION = 2;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
@@ -40,6 +44,16 @@ function summarizeTeam(team) {
     })),
     startingPitcher: summarizePitcher(team?.startingPitcher),
     bullpenCount: Array.isArray(team?.bullpen) ? team.bullpen.length : 0,
+  };
+}
+
+function normalizeValidationPreset(validationPreset) {
+  if (typeof validationPreset === "string") {
+    return { id: validationPreset || "custom", label: validationPreset || "カスタム" };
+  }
+  return {
+    id: validationPreset?.id || "custom",
+    label: validationPreset?.label || "カスタム",
   };
 }
 
@@ -163,6 +177,11 @@ export function getMeasurementDefinitions() {
       calledBallPct: "called balls / all pitches",
       cswPct: "(called strikes + whiffs) / all pitches",
       firstPitchStrikePct: "result strikes on 0-0 pitches / 0-0 pitches",
+      contactPerPitch: "contacts / all pitches",
+      foulPerPitch: "fouls / all pitches",
+      fairBattedBallPerPitch: "fair batted balls / all pitches",
+      foulPerContact: "fouls / contacts",
+      fairBattedBallPerContact: "fair batted balls / contacts",
     },
     pitchAttribution:
       "Every pitch is attached to its pre-pitch count. A terminal pitch also receives the PA outcome.",
@@ -237,16 +256,27 @@ export function getMeasurementModelLimitations() {
 export function buildMeasurementReportObject({
   summary,
   teams,
+  validationPreset,
   generatedAt = new Date().toISOString(),
 }) {
   const results = summary?.results || {};
   const pitchers = summary?.pitchers || { away: [], home: [] };
+  const preset = normalizeValidationPreset(validationPreset);
+  const referenceBenchmark =
+    summary?.referenceBenchmark || getMlb2025ReferenceBenchmark();
+  const referenceComparison =
+    summary?.referenceComparison || buildMeasurementReferenceComparison(summary);
   return sanitizeValue({
     reportSchemaVersion: MEASUREMENT_REPORT_SCHEMA_VERSION,
     reportType: "baseball_gm_high_speed_measurement",
     generatedAt,
     status: summary?.status || "error",
     partial: summary?.status === "cancelled",
+    validationPreset: preset.id,
+    validationPresetLabel: preset.label,
+    referenceBenchmark,
+    referenceComparison,
+    contactDisposition: summary?.contactDisposition || {},
     run: summary?.run || {},
     teams: {
       away: summarizeTeam(teams?.away),
@@ -533,12 +563,72 @@ function gameDistributionTable(distribution) {
   ];
 }
 
+function formatComparisonValue(value, format, signed = false) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return "-";
+  }
+  const number = Number(value);
+  const sign = signed && number > 0 ? "+" : "";
+  return format === "rate"
+    ? `${sign}${(number * 100).toFixed(2)}%`
+    : `${sign}${number.toFixed(3)}`;
+}
+
+function referenceComparisonTable(rows) {
+  return [
+    "| 指標 | 現行結果 | 2025 MLB参考 | 差 | 比較精度 |",
+    "| --- | ---: | ---: | ---: | --- |",
+    ...(rows || []).map((row) =>
+      `| ${mdCell(row.label)} | ${formatComparisonValue(row.current, row.format)} | ${formatComparisonValue(row.reference, row.format)} | ${formatComparisonValue(row.difference, row.format, true)} | ${mdCell(row.accuracy)} |`
+    ),
+  ];
+}
+
+function contactDispositionTable(disposition) {
+  return [
+    "| Metric | Value |",
+    "| --- | ---: |",
+    `| pitches | ${formatNumber(disposition?.pitches)} |`,
+    `| swings | ${formatNumber(disposition?.swings)} |`,
+    `| contacts | ${formatNumber(disposition?.contacts)} |`,
+    `| fouls | ${formatNumber(disposition?.fouls)} |`,
+    `| fairBattedBalls | ${formatNumber(disposition?.fairBattedBalls)} |`,
+    `| contactPerPitch | ${formatPct(disposition?.contactPerPitch)} |`,
+    `| foulPerPitch | ${formatPct(disposition?.foulPerPitch)} |`,
+    `| fairBattedBallPerPitch | ${formatPct(disposition?.fairBattedBallPerPitch)} |`,
+    `| foulPerContact | ${formatPct(disposition?.foulPerContact)} |`,
+    `| fairBattedBallPerContact | ${formatPct(disposition?.fairBattedBallPerContact)} |`,
+  ];
+}
+
+function referenceBenchmarkTable(benchmark) {
+  const totals = benchmark?.totals || {};
+  const metrics = benchmark?.metrics || {};
+  const derived = benchmark?.derivedContactDisposition || {};
+  return [
+    `- id: ${mdCell(benchmark?.id)}`,
+    `- label: ${mdCell(benchmark?.label)}`,
+    `- source: ${mdCell(benchmark?.source?.url)}`,
+    `- totals: PA ${totals.PA || "-"}, AB ${totals.AB || "-"}, H ${totals.H || "-"}, 2B ${totals.doubles || "-"}, 3B ${totals.triples || "-"}, HR ${totals.HR || "-"}, BB ${totals.BB || "-"}, K ${totals.K || "-"}, Pitches ${totals.pitches || "-"}, BBE ${totals.BBE || "-"}`,
+    `- slashLine: ${formatNumber(metrics.AVG)} / ${formatNumber(metrics.OBP)} / ${formatNumber(metrics.SLG)} / ${formatNumber(metrics.OPS)}`,
+    `- derivedContact/Pitch: ${formatPct(derived.contactPerPitch)}`,
+    `- derivedFoul/Pitch: ${formatPct(derived.foulPerPitch)}`,
+    `- derivedBIP/Pitch: ${formatPct(derived.fairBattedBallPerPitch)}`,
+    `- derivedFoul/Contact: ${formatPct(derived.foulPerContact)}`,
+    `- derivedFair/Contact: ${formatPct(derived.fairBattedBallPerContact)}`,
+    `- derivedNote: ${mdCell(derived.derivation)}`,
+    ...(benchmark?.definitionNotes || []).map((note) => `- note: ${mdCell(note)}`),
+  ];
+}
+
 export function buildMeasurementMarkdown(options) {
   const report = buildMeasurementReportObject(options);
   const {
     run, teams, engineConfig, results, battedBallMetrics, diagnostics,
     plateDiscipline, battedBallProfiles, breakdowns, smoothingDiagnostics,
     players, pitchers, gameDistribution, definitions, modelLimitations,
+    validationPreset, validationPresetLabel, referenceBenchmark,
+    referenceComparison, contactDisposition,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -557,6 +647,11 @@ export function buildMeasurementMarkdown(options) {
     ...teamConditionLines("away", teams.away),
     ...teamConditionLines("home", teams.home),
     "",
+    "## Validation Preset",
+    "",
+    `- validationPreset: ${validationPreset}`,
+    `- label: ${validationPresetLabel}`,
+    "",
     "## エンジン設定 / Engine Configuration",
     "",
     `- outcomeModel: ${engineConfig.outcomeModel}`,
@@ -571,6 +666,21 @@ export function buildMeasurementMarkdown(options) {
     "## 主要結果 / Team Batting Results",
     "",
     ...resultTable(results),
+    "",
+    "## Reference Benchmark",
+    "",
+    ...referenceBenchmarkTable(referenceBenchmark),
+    "",
+    "## Reference Comparison",
+    "",
+    ...referenceComparisonTable(referenceComparison),
+    "",
+    "## Contact Disposition",
+    "",
+    ...contactDispositionTable(contactDisposition),
+    "",
+    `- invariant: fouls + fairBattedBalls == contacts (${contactDisposition.fouls || 0} + ${contactDisposition.fairBattedBalls || 0} == ${contactDisposition.contacts || 0})`,
+    `- contactDispositionMismatchCount: ${diagnostics.contactDispositionMismatchCount || 0}`,
     "",
     "## Game Distribution",
     "",

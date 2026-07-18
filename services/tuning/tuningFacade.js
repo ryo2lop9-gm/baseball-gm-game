@@ -9,7 +9,7 @@ import {
   getSelectedEditableEntity,
   loadEditorFormFromEntity,
   applyEditorFormToRoster,
-} from "../../engine/gm/editorEngine.js";
+} from "../../engine/gm/editorEngine.js?v=codex11-2";
 
 export function createTuningFacade({
   getAppState,
@@ -19,8 +19,25 @@ export function createTuningFacade({
   setTuningRosterBundle,
   createDefaultRosterBundle,
   createMlbValidationRosterBundle,
+  createGmBasicReferenceRosterBundle,
   createFreshTuningGame,
 }) {
+  function getCurrentValidationPreset() {
+    const bundle = getTuningRosterBundle();
+    return {
+      id: bundle?.validationPreset || "custom",
+      label: bundle?.validationPresetLabel || "カスタム",
+    };
+  }
+
+  function markRosterBundleCustom(bundle) {
+    return {
+      ...bundle,
+      validationPreset: "custom",
+      validationPresetLabel: "カスタム",
+    };
+  }
+
   function getTuningState() {
     return getAppState().tuning;
   }
@@ -158,6 +175,21 @@ export function createTuningFacade({
     return nextGame;
   }
 
+  function applyGmBasicReferencePreset() {
+    if (typeof createGmBasicReferenceRosterBundle !== "function") {
+      return resetSandboxRoster();
+    }
+
+    const nextBundle = createGmBasicReferenceRosterBundle();
+    setTuningRosterBundle(nextBundle);
+    setAppTuningSeasonSummary(null);
+
+    const nextGame = createFreshTuningGame(nextBundle);
+    setAppTuningState(nextGame);
+
+    return nextGame;
+  }
+
   function refreshEditorForm(dom) {
     fillEditorSlotOptions(dom);
     const entity = getSelectedEditableEntity(dom, getTuningRosterBundle());
@@ -166,7 +198,9 @@ export function createTuningFacade({
   }
 
   function applyEditorChanges(dom) {
-    const nextBundle = applyEditorFormToRoster(dom, getTuningRosterBundle());
+    const nextBundle = markRosterBundleCustom(
+      applyEditorFormToRoster(dom, getTuningRosterBundle())
+    );
     setTuningRosterBundle(nextBundle);
     setAppTuningSeasonSummary(null);
 
@@ -182,6 +216,7 @@ export function createTuningFacade({
   return {
     getTuningState,
     getTuningSeasonSummary,
+    getCurrentValidationPreset,
     prepareFreshTuningGame,
     pushFinishedGameNote,
     stepOnePitch,
@@ -191,6 +226,7 @@ export function createTuningFacade({
     runSeasonSimulation,
     resetSandboxRoster,
     applyMlbValidationPreset,
+    applyGmBasicReferencePreset,
     refreshEditorForm,
     applyEditorChanges,
   };

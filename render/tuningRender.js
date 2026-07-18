@@ -625,6 +625,15 @@ export function renderLineups(state, dom) {
   dom.lineupBody.innerHTML = rows.join("");
 }
 
+export function renderValidationPreset(preset, dom) {
+  if (dom.tuningValidationPreset) {
+    dom.tuningValidationPreset.textContent = preset?.label || "カスタム";
+  }
+  if (dom.tuningValidationPresetId) {
+    dom.tuningValidationPresetId.textContent = preset?.id || "custom";
+  }
+}
+
 export function clearLog(dom) {
   if (dom.log) dom.log.textContent = "";
 }

@@ -15,6 +15,7 @@ export function getMeasurementDom() {
     lineupSize: document.getElementById("measurementLineupSize"),
     activeSeed: document.getElementById("measurementActiveSeed"),
     activeGameCount: document.getElementById("measurementActiveGameCount"),
+    validationPreset: document.getElementById("measurementValidationPreset"),
 
     status: document.getElementById("measurementStatus"),
     progress: document.getElementById("measurementProgress"),
@@ -25,6 +26,9 @@ export function getMeasurementDom() {
     gamesPerSecond: document.getElementById("measurementGamesPerSecond"),
 
     kpis: document.getElementById("measurementKpis"),
+    referenceComparison: document.getElementById("measurementReferenceComparison"),
+    referenceSource: document.getElementById("measurementReferenceSource"),
+    contactDisposition: document.getElementById("measurementContactDisposition"),
     teamResults: document.getElementById("measurementTeamResults"),
     smoothingSummary: document.getElementById("measurementSmoothingSummary"),
     sourceTable: document.getElementById("measurementSourceTable"),

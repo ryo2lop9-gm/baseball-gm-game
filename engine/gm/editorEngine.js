@@ -92,6 +92,26 @@ export function loadEditorFormFromEntity(dom, entity) {
   const type = dom.editorPlayerTypeSelect?.value || "batter";
   const isPitcher = type === "pitcher";
 
+  if (dom.editorBatterFields) dom.editorBatterFields.hidden = isPitcher;
+  if (dom.editorPitcherFields) dom.editorPitcherFields.hidden = !isPitcher;
+  for (const input of [
+    dom.editorContactInput,
+    dom.editorPowerInput,
+    dom.editorEyeInput,
+  ]) {
+    if (input) input.disabled = isPitcher;
+  }
+  for (const input of [
+    dom.editorControlInput,
+    dom.editorStuffInput,
+    dom.editorFourSeamVeloInput,
+    dom.editorSliderVeloInput,
+    dom.editorCurveVeloInput,
+    dom.editorForkVeloInput,
+  ]) {
+    if (input) input.disabled = !isPitcher;
+  }
+
   if (dom.editorNameInput) dom.editorNameInput.value = entity?.name || "";
 
   if (dom.editorContactInput) dom.editorContactInput.value = type === "batter" ? safeNum(ratings.contact) : "";

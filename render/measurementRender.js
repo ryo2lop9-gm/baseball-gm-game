@@ -1,7 +1,7 @@
 import {
   getMeasurementDefinitions,
   getMeasurementModelLimitations,
-} from "../services/measurement/measurementReportService.js";
+} from "../services/measurement/measurementReportService.js?v=codex11-2";
 
 function setText(element, value) {
   if (element) element.textContent = String(value ?? "-");
@@ -15,6 +15,17 @@ function formatNumber(value, digits = 3) {
 
 function formatPct(value) {
   return `${(Number(value || 0) * 100).toFixed(2)}%`;
+}
+
+function formatOptional(value, format = "rate", signed = false) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return "-";
+  }
+  const number = Number(value);
+  const sign = signed && number > 0 ? "+" : "";
+  return format === "rate"
+    ? `${sign}${(number * 100).toFixed(2)}%`
+    : `${sign}${number.toFixed(3)}`;
 }
 
 function renderTable(container, headers, rows) {
@@ -88,6 +99,53 @@ function renderKpis(container, summary) {
     fragment.append(item);
   }
   container.replaceChildren(fragment);
+}
+
+function renderReferenceComparison(dom, summary) {
+  if (!summary) {
+    dom.referenceComparison?.replaceChildren();
+    dom.contactDisposition?.replaceChildren();
+    setText(dom.referenceSource, "-");
+    return;
+  }
+
+  const rows = (summary.referenceComparison || []).map((row) => [
+    row.label,
+    formatOptional(row.current, row.format),
+    formatOptional(row.reference, row.format),
+    formatOptional(row.difference, row.format, true),
+    row.accuracy,
+  ]);
+  renderTable(
+    dom.referenceComparison,
+    ["指標", "現行結果", "2025 MLB参考", "差", "比較精度"],
+    rows
+  );
+  const renderedRows = dom.referenceComparison?.querySelectorAll?.("tbody tr") || [];
+  renderedRows.forEach((row, index) => {
+    row.dataset.comparisonAccuracy =
+      summary.referenceComparison?.[index]?.accuracy || "not_comparable";
+  });
+
+  const disposition = summary.contactDisposition || {};
+  renderTable(dom.contactDisposition, ["Metric", "Count / Rate"], [
+    ["Pitches", disposition.pitches],
+    ["Swings", disposition.swings],
+    ["Contacts", disposition.contacts],
+    ["Fouls", disposition.fouls],
+    ["Fair batted balls", disposition.fairBattedBalls],
+    ["Contact/Pitch", formatPct(disposition.contactPerPitch)],
+    ["Foul/Pitch", formatPct(disposition.foulPerPitch)],
+    ["BIP/Pitch", formatPct(disposition.fairBattedBallPerPitch)],
+    ["Foul/Contact", formatPct(disposition.foulPerContact)],
+    ["Fair/Contact", formatPct(disposition.fairBattedBallPerContact)],
+  ]);
+
+  const source = summary.referenceBenchmark?.source || {};
+  setText(dom.referenceSource, source.url || "-");
+  if (dom.referenceSource?.tagName === "A" && source.url) {
+    dom.referenceSource.href = source.url;
+  }
 }
 
 function renderTeamResults(container, summary) {
@@ -632,6 +690,10 @@ export function renderMeasurementPage(state, dom) {
   );
   setText(dom.activeSeed, state.seed);
   setText(dom.activeGameCount, requestedGames || state.gameCount);
+  setText(
+    dom.validationPreset,
+    `${state.validationPreset?.label || "カスタム"} (${state.validationPreset?.id || "custom"})`
+  );
 
   setText(dom.status, state.status);
   dom.status?.classList.toggle("warning", state.status === "error");
@@ -659,6 +721,7 @@ export function renderMeasurementPage(state, dom) {
   });
 
   renderKpis(dom.kpis, state.summary);
+  renderReferenceComparison(dom, state.summary);
   renderTeamResults(dom.teamResults, state.summary);
   renderSmoothing(dom, state.summary);
   renderQoC(dom.qocTable, state.summary);

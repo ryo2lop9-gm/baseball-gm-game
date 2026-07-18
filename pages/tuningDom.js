@@ -39,6 +39,9 @@ export function getTuningDom() {
     sim162Btn: document.getElementById("sim162Btn"),
     resetTuningRosterBtn: document.getElementById("resetTuningRosterBtn"),
     applyMlbValidationPresetBtn: document.getElementById("applyMlbValidationPresetBtn"),
+    applyGmBasicReferencePresetBtn: document.getElementById("applyGmBasicReferencePresetBtn"),
+    tuningValidationPreset: document.getElementById("tuningValidationPreset"),
+    tuningValidationPresetId: document.getElementById("tuningValidationPresetId"),
 
     tuningCurrentScore: document.getElementById("tuningCurrentScore"),
     tuningCurrentState: document.getElementById("tuningCurrentState"),
@@ -64,6 +67,8 @@ export function getTuningDom() {
     editorPlayerTypeSelect: document.getElementById("editorPlayerTypeSelect"),
     editorSlotSelect: document.getElementById("editorSlotSelect"),
     editorNameInput: document.getElementById("editorNameInput"),
+    editorBatterFields: document.getElementById("editorBatterFields"),
+    editorPitcherFields: document.getElementById("editorPitcherFields"),
     editorContactInput: document.getElementById("editorContactInput"),
     editorPowerInput: document.getElementById("editorPowerInput"),
     editorEyeInput: document.getElementById("editorEyeInput"),

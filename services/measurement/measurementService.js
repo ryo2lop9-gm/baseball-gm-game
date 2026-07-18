@@ -12,6 +12,10 @@ import {
   recordAdvancedBattedBallMeasurement,
   recordPitchMeasurement,
 } from "./measurementAdvancedService.js";
+import {
+  buildMeasurementReferenceComparison,
+  getMlb2025ReferenceBenchmark,
+} from "./measurementReferenceService.js";
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
@@ -389,6 +393,28 @@ function safeDivide(numerator, denominator) {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
+export function buildContactDisposition(plateDiscipline) {
+  const combined = plateDiscipline?.combined || {};
+  const pitches = Number(combined.pitches) || 0;
+  const swings = Number(combined.swings) || 0;
+  const contacts = Number(combined.contacts) || 0;
+  const fouls = Number(combined.fouls) || 0;
+  const fairBattedBalls = Number(combined.fairBattedBalls) || 0;
+
+  return {
+    pitches,
+    swings,
+    contacts,
+    fouls,
+    fairBattedBalls,
+    contactPerPitch: safeDivide(contacts, pitches),
+    foulPerPitch: safeDivide(fouls, pitches),
+    fairBattedBallPerPitch: safeDivide(fairBattedBalls, pitches),
+    foulPerContact: safeDivide(fouls, contacts),
+    fairBattedBallPerContact: safeDivide(fairBattedBalls, contacts),
+  };
+}
+
 function finalizeTeam(raw, completedGames, combined = false) {
   const singles = Math.max(0, raw.H - raw.doubles - raw.triples - raw.HR);
   const totalBases =
@@ -522,6 +548,23 @@ export function finalizeMeasurementSummary(accumulator, run) {
     qoc,
     battedBallMetrics,
   });
+  const contactDisposition = buildContactDisposition(advanced.plateDiscipline);
+  const diagnostics = {
+    ...accumulator.diagnostics,
+    ...advanced.diagnostics,
+    contactDispositionMismatchCount:
+      contactDisposition.contacts ===
+      contactDisposition.fouls + contactDisposition.fairBattedBalls
+        ? 0
+        : 1,
+  };
+  const referenceBenchmark = getMlb2025ReferenceBenchmark();
+  const referenceComparison = buildMeasurementReferenceComparison({
+    results,
+    plateDiscipline: advanced.plateDiscipline,
+    battingProfiles: advanced.battingProfiles,
+    contactDisposition,
+  });
 
   return {
     reportSchemaVersion: MEASUREMENT_SUMMARY_SCHEMA_VERSION,
@@ -542,12 +585,15 @@ export function finalizeMeasurementSummary(accumulator, run) {
     battedBallMetrics,
     gameDistribution: advanced.gameDistribution,
     plateDiscipline: advanced.plateDiscipline,
+    contactDisposition,
+    referenceBenchmark,
+    referenceComparison,
     battingProfiles: advanced.battingProfiles,
     players: advanced.players,
     pitchers: advanced.pitchers,
     breakdowns: advanced.breakdowns,
     smoothingDiagnostics: advanced.smoothingDiagnostics,
-    diagnostics: { ...accumulator.diagnostics, ...advanced.diagnostics },
+    diagnostics,
     simulationErrors: structuredClone(accumulator.simulationErrors),
   };
 }

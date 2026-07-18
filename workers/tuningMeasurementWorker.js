@@ -1,5 +1,5 @@
 import { loadEvLaLookup } from "../services/evLaLookupStore.js";
-import { runMeasurementBatches } from "../services/measurement/measurementService.js";
+import { runMeasurementBatches } from "../services/measurement/measurementService.js?v=codex11-2";
 
 let activeRunId = null;
 let cancelRequested = false;

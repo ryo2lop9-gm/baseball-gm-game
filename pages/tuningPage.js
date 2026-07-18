@@ -1,4 +1,4 @@
-import { getTuningDom } from "./tuningDom.js";
+import { getTuningDom } from "./tuningDom.js?v=codex11-2";
 import {
   renderGameCore,
   renderPitchPresentation,
@@ -7,8 +7,9 @@ import {
   clearLog,
   renderTuningGameTables,
   renderTuningSeasonTables,
-} from "../render/tuningRender.js";
-import { createTuningFacade } from "../services/tuning/tuningFacade.js";
+  renderValidationPreset,
+} from "../render/tuningRender.js?v=codex11-2";
+import { createTuningFacade } from "../services/tuning/tuningFacade.js?v=codex11-2";
 
 export function createTuningPageController({
   getAppState,
@@ -18,6 +19,7 @@ export function createTuningPageController({
   setTuningRosterBundle,
   createDefaultRosterBundle,
   createMlbValidationRosterBundle,
+  createGmBasicReferenceRosterBundle,
   createFreshTuningGame,
 }) {
   const dom = getTuningDom();
@@ -29,6 +31,7 @@ export function createTuningPageController({
     setTuningRosterBundle,
     createDefaultRosterBundle,
     createMlbValidationRosterBundle,
+    createGmBasicReferenceRosterBundle,
     createFreshTuningGame,
   });
 
@@ -52,6 +55,7 @@ export function createTuningPageController({
     renderLineups(getTuningState(), dom);
     renderTuningGameTables(getTuningState(), dom);
     renderTuningSeasonTables(getTuningSeasonSummary(), dom);
+    renderValidationPreset(facade.getCurrentValidationPreset(), dom);
   }
 
   function renderFullLog() {
@@ -144,6 +148,13 @@ export function createTuningPageController({
     syncTuningPage();
   }
 
+  function applyGmBasicReferencePreset() {
+    facade.applyGmBasicReferencePreset();
+    resetLogCursor();
+    renderFullLog();
+    syncTuningPage();
+  }
+
   function applyEditorChanges() {
     facade.applyEditorChanges(dom);
     resetLogCursor();
@@ -167,6 +178,10 @@ export function createTuningPageController({
 
     dom.resetTuningRosterBtn?.addEventListener("click", resetSandboxRoster);
     dom.applyMlbValidationPresetBtn?.addEventListener("click", applyMlbValidationPreset);
+    dom.applyGmBasicReferencePresetBtn?.addEventListener(
+      "click",
+      applyGmBasicReferencePreset
+    );
 
     dom.editorSideSelect?.addEventListener("change", refreshEditorForm);
     dom.editorPlayerTypeSelect?.addEventListener("change", refreshEditorForm);

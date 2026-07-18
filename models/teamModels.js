@@ -233,6 +233,52 @@ function createMlbValidationPitcher(name, profile) {
   );
 }
 
+const GM_BASIC_REFERENCE_PITCHER_PROFILE = Object.freeze({
+  control: 58,
+  stuff: 61,
+  pitchMix: Object.freeze({
+    fourSeam: Object.freeze({ usage: 0.42, velocity: 94.0 }),
+    slider: Object.freeze({ usage: 0.27, velocity: 85.3 }),
+    curve: Object.freeze({ usage: 0.10, velocity: 79.2 }),
+    fork: Object.freeze({ usage: 0.21, velocity: 86.0 }),
+  }),
+});
+
+function createGmBasicReferenceLineup(prefix) {
+  return Array.from({ length: 9 }, (_, index) =>
+    createGameBatter(`${prefix} Batter ${index + 1}`, 60, 60, 50)
+  );
+}
+
+function createGmBasicReferencePitcher(name) {
+  return createMlbValidationPitcher(name, GM_BASIC_REFERENCE_PITCHER_PROFILE);
+}
+
+function createGmBasicReferenceTeam({ name, playerPrefix }) {
+  return {
+    name,
+    startingPitcher: createGmBasicReferencePitcher(`${playerPrefix} Starter`),
+    bullpen: [
+      createGmBasicReferencePitcher(`${playerPrefix} RP 1`),
+      createGmBasicReferencePitcher(`${playerPrefix} RP 2`),
+    ],
+    lineup: createGmBasicReferenceLineup(playerPrefix),
+  };
+}
+
+export function createGmBasicReferenceValidationTeams() {
+  return {
+    away: createGmBasicReferenceTeam({
+      name: "GM Basic Reference Away",
+      playerPrefix: "GM Ref Away",
+    }),
+    home: createGmBasicReferenceTeam({
+      name: "GM Basic Reference Home",
+      playerPrefix: "GM Ref Home",
+    }),
+  };
+}
+
 export function createMlbAverageValidationTeams() {
   const averageStarter = createMlbValidationPitcher("MLB Avg Starter", {
     control: 61,

@@ -1,18 +1,18 @@
-import { createRouteDom, applyRouteVisibility } from "./appRouter.js?v=codex10-2";
-import { createPageRouter } from "./router.js?v=codex10-2";
+import { createRouteDom, applyRouteVisibility } from "./appRouter.js?v=codex11-2";
+import { createPageRouter } from "./router.js?v=codex11-2";
 import { createRootStatePersistence } from "./persistence.js";
 import { createSaveControls } from "./saveControls.js";
-import { createRootStateFactory } from "./rootStateFactory.js?v=codex10-2";
+import { createRootStateFactory } from "./rootStateFactory.js?v=codex11-2";
 import { createRootStateStore } from "./rootStateStore.js";
 import { loadEvLaLookup } from "../services/evLaLookupStore.js";
 
 import { createGMDeskPageController } from "../pages/gmDeskPage.js";
 import { createStatsPageController } from "../pages/statsPage.js";
-import { createTuningPageController } from "../pages/tuningPage.js";
-import { createMeasurementPageController } from "../pages/measurementPage.js?v=codex10-2";
+import { createTuningPageController } from "../pages/tuningPage.js?v=codex11-2";
+import { createMeasurementPageController } from "../pages/measurementPage.js?v=codex11-2";
 
 import { createInitialAppState, createGMDeskFactory } from "./gmBootstrap.js";
-import { createTuningBootstrap } from "./tuningBootstrap.js";
+import { createTuningBootstrap } from "./tuningBootstrap.js?v=codex11-2";
 
 import {
   setCurrentPage,
@@ -227,6 +227,8 @@ async function initializeApp() {
     createDefaultRosterBundle: () => tuningBootstrap.createDefaultRosterBundle(),
     createMlbValidationRosterBundle: () =>
       tuningBootstrap.createMlbValidationRosterBundle(),
+    createGmBasicReferenceRosterBundle: () =>
+      tuningBootstrap.createGmBasicReferenceRosterBundle(),
     createFreshTuningGame: () =>
       tuningBootstrap.createFreshTuningGame(
         rootStateStore.getTuningRosterBundle()
