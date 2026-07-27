@@ -2,6 +2,7 @@ import {
   VELOCITY_BANDS,
   getVelocityBandByVelocity,
 } from "../../config/velocityBandConfig.js";
+import { PITCH_LOCATION_CONFIG } from "../../config/pitchLocationConfig.js";
 import {
   createMeasurementHistogram,
   finalizeMeasurementHistogram,
@@ -18,6 +19,25 @@ export const MEASUREMENT_PITCH_TYPES = Object.freeze([
   "fourSeam", "slider", "curve", "fork", "unknown",
 ]);
 export const MEASUREMENT_COURSES = Object.freeze(["A", "B", "C", "Ball", "unknown"]);
+export const MEASUREMENT_ATTACK_REGIONS = Object.freeze([
+  "HEART", "SHADOW", "CHASE", "WASTE", "unknown",
+]);
+export const MEASUREMENT_ATTACK_REGION_DETAILS = Object.freeze([
+  "HEART", "SHADOW_IN", "SHADOW_OUT", "CHASE", "WASTE", "unknown",
+]);
+export const MEASUREMENT_MEATBALL_KEYS = Object.freeze([
+  "MEATBALL", "NON_MEATBALL", "unknown",
+]);
+export const MEASUREMENT_LOCATION_COURSES = Object.freeze([
+  "A", "B", "C", "Ball", "unknown",
+]);
+export const MEASUREMENT_LOCATION_GRID_KEYS = Object.freeze([
+  ...Array.from(
+    { length: 25 },
+    (_, index) => `r${Math.floor(index / 5)}c${index % 5}`
+  ),
+  "unknown",
+]);
 export const MEASUREMENT_OUTCOMES = Object.freeze([
   "out", "single", "double", "triple", "homeRun",
 ]);
@@ -49,6 +69,17 @@ const RESULT_STRIKES = new Set([
 const COUNT_KEYS = new Set(MEASUREMENT_COUNT_KEYS);
 const PITCH_TYPES = new Set(MEASUREMENT_PITCH_TYPES);
 const COURSES = new Set(MEASUREMENT_COURSES);
+const ATTACK_REGIONS = new Set(MEASUREMENT_ATTACK_REGIONS.slice(0, -1));
+const ATTACK_REGION_DETAILS = new Set(
+  MEASUREMENT_ATTACK_REGION_DETAILS.slice(0, -1)
+);
+const LOCATION_COURSES = new Set(MEASUREMENT_LOCATION_COURSES.slice(0, -1));
+const ATTACK_REGION_DETAIL_BY_REGION = Object.freeze({
+  HEART: Object.freeze(["HEART"]),
+  SHADOW: Object.freeze(["SHADOW_IN", "SHADOW_OUT"]),
+  CHASE: Object.freeze(["CHASE"]),
+  WASTE: Object.freeze(["WASTE"]),
+});
 
 const PITCH_FIELDS = Object.freeze([
   "pitches", "zonePitches", "outOfZonePitches", "resultStrikes",
@@ -130,6 +161,9 @@ function createAdvancedDiagnostics() {
     battingInvariantMismatchCount: 0,
     pitchInvariantMismatchCount: 0,
     battedBallInvariantMismatchCount: 0,
+    invalidPitchLocationMeasurementEventCount: 0,
+    pitchLocationFieldMismatchCount: 0,
+    pitchLocationAggregationMismatchCount: 0,
   };
 }
 
@@ -166,6 +200,7 @@ function createGameDistributionRaw() {
 export function createAdvancedMeasurementAccumulator() {
   return {
     pitchBySide: { away: createPitchLine(), home: createPitchLine() },
+    pitchLocation: { away: createPitchLine(), home: createPitchLine() },
     count: createSideMaps(MEASUREMENT_COUNT_KEYS, createPitchLine),
     pitchType: createSideMaps(MEASUREMENT_PITCH_TYPES, createPitchLine),
     velocityBand: createSideMaps(
@@ -173,6 +208,21 @@ export function createAdvancedMeasurementAccumulator() {
       createPitchLine
     ),
     course: createSideMaps(MEASUREMENT_COURSES, createCourseLine),
+    attackRegion: createSideMaps(MEASUREMENT_ATTACK_REGIONS, createPitchLine),
+    attackRegionDetail: createSideMaps(
+      MEASUREMENT_ATTACK_REGION_DETAILS,
+      createPitchLine
+    ),
+    meatball: createSideMaps(MEASUREMENT_MEATBALL_KEYS, createPitchLine),
+    locationCourse: createSideMaps(
+      MEASUREMENT_LOCATION_COURSES,
+      createPitchLine
+    ),
+    locationGrid: createSideMaps(
+      MEASUREMENT_LOCATION_GRID_KEYS,
+      createPitchLine
+    ),
+    locationModel: createSideMaps(["unknown"], createPitchLine),
     strikeType: { away: Object.create(null), home: Object.create(null) },
     ballType: { away: Object.create(null), home: Object.create(null) },
     mistake: createSideMaps(["mistake", "nonMistake"], createPitchLine),
@@ -218,6 +268,118 @@ function normalizeCourse(event, diagnostics) {
   if (COURSES.has(value)) return value;
   diagnostics.unknownCourseCount += 1;
   return "unknown";
+}
+
+function isValidLocationGridCell(value) {
+  return Number.isInteger(value) && value >= 0 && value <= 4;
+}
+
+function normalizePitchLocationEvent(event, diagnostics) {
+  const actualPointValid =
+    event.actualPoint !== null &&
+    typeof event.actualPoint === "object" &&
+    Number.isFinite(event.actualPoint.x) &&
+    Number.isFinite(event.actualPoint.z);
+  const normalizedValuesValid = [
+    event.normalizedX,
+    event.normalizedZ,
+    event.normalizedRadius,
+    event.normalizedZoneEdgeDistance,
+  ].every(Number.isFinite);
+  const actualIsZoneValid = typeof event.actualIsZone === "boolean";
+  const attackRegionValid = ATTACK_REGIONS.has(event.attackRegion);
+  const attackRegionDetailValid = ATTACK_REGION_DETAILS.has(
+    event.attackRegionDetail
+  );
+  const shadowSideValid =
+    event.shadowSide === null ||
+    event.shadowSide === "IN" ||
+    event.shadowSide === "OUT";
+  const isMeatballValid = typeof event.isMeatball === "boolean";
+  const gridValid =
+    isValidLocationGridCell(event.zoneRow) &&
+    isValidLocationGridCell(event.zoneCol);
+  const locationCourseValid = LOCATION_COURSES.has(event.locationCourse);
+  const locationModelValid =
+    typeof event.locationModel === "string" &&
+    event.locationModel.trim().length > 0;
+
+  if (
+    !actualPointValid ||
+    !normalizedValuesValid ||
+    !actualIsZoneValid ||
+    !attackRegionValid ||
+    !attackRegionDetailValid ||
+    !shadowSideValid ||
+    !isMeatballValid ||
+    !gridValid ||
+    !locationCourseValid ||
+    !locationModelValid
+  ) {
+    diagnostics.invalidPitchLocationMeasurementEventCount += 1;
+  }
+
+  let fieldMismatch = false;
+  if (actualIsZoneValid && event.isStrike !== event.actualIsZone) {
+    fieldMismatch = true;
+  }
+  if (
+    attackRegionValid &&
+    attackRegionDetailValid &&
+    !ATTACK_REGION_DETAIL_BY_REGION[event.attackRegion].includes(
+      event.attackRegionDetail
+    )
+  ) {
+    fieldMismatch = true;
+  }
+  if (actualIsZoneValid && attackRegionDetailValid) {
+    if (
+      event.attackRegionDetail === "HEART" ||
+      event.attackRegionDetail === "SHADOW_IN"
+    ) {
+      fieldMismatch ||= !event.actualIsZone;
+    } else {
+      fieldMismatch ||= event.actualIsZone;
+    }
+  }
+  if (attackRegionDetailValid && shadowSideValid) {
+    const expectedShadowSide =
+      event.attackRegionDetail === "SHADOW_IN"
+        ? "IN"
+        : event.attackRegionDetail === "SHADOW_OUT" ? "OUT" : null;
+    if (event.shadowSide !== expectedShadowSide) {
+      fieldMismatch = true;
+    }
+  }
+  if (
+    isMeatballValid &&
+    event.isMeatball &&
+    event.attackRegion !== "HEART"
+  ) {
+    fieldMismatch = true;
+  }
+  if (fieldMismatch) {
+    diagnostics.pitchLocationFieldMismatchCount += 1;
+  }
+
+  return {
+    actualIsZone:
+      actualIsZoneValid ? event.actualIsZone : Boolean(event.isStrike),
+    attackRegion: attackRegionValid ? event.attackRegion : "unknown",
+    attackRegionDetail:
+      attackRegionDetailValid ? event.attackRegionDetail : "unknown",
+    meatball: isMeatballValid
+      ? event.isMeatball ? "MEATBALL" : "NON_MEATBALL"
+      : "unknown",
+    locationCourse:
+      locationCourseValid ? event.locationCourse : "unknown",
+    locationGrid: gridValid
+      ? `r${event.zoneRow}c${event.zoneCol}`
+      : "unknown",
+    locationModel: locationModelValid
+      ? event.locationModel.trim()
+      : "unknown",
+  };
 }
 
 function normalizeDrift(value) {
@@ -297,17 +459,22 @@ function recordTerminalResult(line, event) {
   }
 }
 
-function recordPitchLine(line, event, resultStrike) {
+function recordPitchLine(
+  line,
+  event,
+  resultStrike,
+  isZone = event.isStrike
+) {
   line[PITCH.pitches] += 1;
-  line[event.isStrike ? PITCH.zonePitches : PITCH.outOfZonePitches] += 1;
+  line[isZone ? PITCH.zonePitches : PITCH.outOfZonePitches] += 1;
   if (resultStrike) line[PITCH.resultStrikes] += 1;
   if (event.swung) {
     line[PITCH.swings] += 1;
-    line[event.isStrike ? PITCH.zoneSwings : PITCH.chaseSwings] += 1;
+    line[isZone ? PITCH.zoneSwings : PITCH.chaseSwings] += 1;
   }
   if (event.madeContact) {
     line[PITCH.contacts] += 1;
-    line[event.isStrike ? PITCH.zoneContacts : PITCH.chaseContacts] += 1;
+    line[isZone ? PITCH.zoneContacts : PITCH.chaseContacts] += 1;
   }
   if (event.pitchResult === "swinging_strike") line[PITCH.whiffs] += 1;
   if (event.pitchResult === "called_strike") line[PITCH.calledStrikes] += 1;
@@ -324,6 +491,26 @@ function recordPitchLine(line, event, resultStrike) {
     if (resultStrike) line[PITCH.firstPitchStrikes] += 1;
   }
   recordTerminalResult(line, event);
+}
+
+function recordPitchLocation(advanced, side, event, resultStrike) {
+  const location = normalizePitchLocationEvent(event, advanced.diagnostics);
+  const record = (line) =>
+    recordPitchLine(line, event, resultStrike, location.actualIsZone);
+
+  record(advanced.pitchLocation[side]);
+  record(advanced.attackRegion[side][location.attackRegion]);
+  record(advanced.attackRegionDetail[side][location.attackRegionDetail]);
+  record(advanced.meatball[side][location.meatball]);
+  record(advanced.locationCourse[side][location.locationCourse]);
+  record(advanced.locationGrid[side][location.locationGrid]);
+  record(
+    getOrCreate(
+      advanced.locationModel[side],
+      location.locationModel,
+      createPitchLine
+    )
+  );
 }
 
 function recordBattedLine(line, event) {
@@ -425,6 +612,7 @@ export function recordPitchMeasurement(advanced, event) {
 
   const resultStrike = RESULT_STRIKES.has(safeEvent.pitchResult);
   recordPitchLine(advanced.pitchBySide[side], safeEvent, resultStrike);
+  recordPitchLocation(advanced, side, safeEvent, resultStrike);
   if (countKey) {
     recordPitchLine(advanced.count[side][countKey], safeEvent, resultStrike);
   }
@@ -641,8 +829,21 @@ export function commitAdvancedMeasurementGame(target, source, gameState) {
   hydratePlayerRuns(source, gameState);
   for (const side of SIDES) {
     mergePitchLine(target.pitchBySide[side], source.pitchBySide[side]);
+    mergePitchLine(target.pitchLocation[side], source.pitchLocation[side]);
   }
-  for (const group of ["count", "pitchType", "velocityBand", "mistake", "drift"]) {
+  for (const group of [
+    "count",
+    "pitchType",
+    "velocityBand",
+    "mistake",
+    "drift",
+    "attackRegion",
+    "attackRegionDetail",
+    "meatball",
+    "locationCourse",
+    "locationGrid",
+    "locationModel",
+  ]) {
     mergeSideMaps(target[group], source[group], createPitchLine, mergePitchLine);
   }
   for (const side of SIDES) {
@@ -821,6 +1022,101 @@ function finalizeGroupedBySide(rawBySide, keys, factory, merger, finalizer) {
     result.home[key] = finalizer(home);
     result.combined[key] = finalizer(combineRaw(away, home, factory, merger));
   }
+  return result;
+}
+
+function finalizePitchLocationGroup(
+  rawBySide,
+  keys,
+  plateDiscipline,
+  decorate = null
+) {
+  const result = finalizeGroupedBySide(
+    rawBySide,
+    keys,
+    createPitchLine,
+    mergePitchLine,
+    finalizePitchLine
+  );
+
+  for (const side of [...SIDES, "combined"]) {
+    const pitchTotal = plateDiscipline[side].pitches;
+    for (const [key, value] of Object.entries(result[side])) {
+      value.pitchPct = safeDivide(value.pitches, pitchTotal);
+      if (decorate) decorate(value, key);
+    }
+  }
+  return result;
+}
+
+function decorateLocationGrid(value, key) {
+  const match = /^r([0-4])c([0-4])$/.exec(key);
+  value.zoneRow = match ? Number(match[1]) : null;
+  value.zoneCol = match ? Number(match[2]) : null;
+}
+
+function buildPitchLocationSummary(
+  advanced,
+  plateDiscipline,
+  breakdowns
+) {
+  const locationLines = finalizeBySide(
+    advanced.pitchLocation,
+    createPitchLine,
+    mergePitchLine,
+    finalizePitchLine
+  );
+  const result = {};
+
+  for (const side of [...SIDES, "combined"]) {
+    const line = locationLines[side];
+    const attackRegion = breakdowns.attackRegion[side];
+    const detail = breakdowns.attackRegionDetail[side];
+    const meatball = breakdowns.meatball[side];
+    const shadowPct = attackRegion.SHADOW.pitchPct;
+
+    result[side] = {
+      pitches: line.pitches,
+      geometricZonePitches: line.zonePitches,
+      geometricZonePct: line.zonePct,
+      resultStrikes: line.resultStrikes,
+      resultStrikePct: line.resultStrikePct,
+      calledStrikes: line.calledStrikes,
+      calledStrikePct: line.calledStrikePct,
+      outOfZonePitches: line.outOfZonePitches,
+      outOfZoneSwings: line.chaseSwings,
+      chasePct: plateDiscipline[side].chasePct,
+      heartPct: attackRegion.HEART.pitchPct,
+      shadowPct,
+      edgePct: shadowPct,
+      shadowInPct: detail.SHADOW_IN.pitchPct,
+      shadowOutPct: detail.SHADOW_OUT.pitchPct,
+      chaseRegionPct: attackRegion.CHASE.pitchPct,
+      wastePct: attackRegion.WASTE.pitchPct,
+      meatballPct: meatball.MEATBALL.pitchPct,
+    };
+  }
+
+  const modelCounts = breakdowns.locationModel.combined;
+  const activeModels = Object.entries(modelCounts)
+    .filter(([key, value]) => key !== "unknown" && value.pitches > 0)
+    .map(([key]) => key);
+  const totalPitches = result.combined.pitches;
+  const legacyModel =
+    PITCH_LOCATION_CONFIG.legacyGridCompatibility.locationModel;
+  const legacyPitches = modelCounts[legacyModel]?.pitches || 0;
+  const unknownPitches = modelCounts.unknown?.pitches || 0;
+
+  result.compatibility = {
+    activeLocationModel:
+      activeModels.length === 1
+        ? activeModels[0]
+        : activeModels.length > 1 ? "mixed" : "unknown",
+    legacyGridCompatNoChaseByDesign:
+      totalPitches > 0 && legacyPitches === totalPitches,
+    continuousLocationDistributionAvailable:
+      totalPitches - legacyPitches - unknownPitches > 0,
+  };
   return result;
 }
 
@@ -1009,7 +1305,51 @@ function countInvariant(condition) {
   return condition ? 0 : 1;
 }
 
-function calculateInvariantDiagnostics(advanced, results, qoc, battedBallMetrics) {
+function getRawPitchLineForSide(rawBySide, side) {
+  if (side !== "combined") return rawBySide[side];
+  return combineRaw(
+    rawBySide.away,
+    rawBySide.home,
+    createPitchLine,
+    mergePitchLine
+  );
+}
+
+function getRawBreakdownPitchCount(rawBySide, side, key) {
+  if (side === "combined") {
+    return (
+      (rawBySide.away[key]?.[PITCH.pitches] || 0) +
+      (rawBySide.home[key]?.[PITCH.pitches] || 0)
+    );
+  }
+  return rawBySide[side][key]?.[PITCH.pitches] || 0;
+}
+
+function getRawBreakdownPitchTotal(rawBySide, side) {
+  if (side === "combined") {
+    return SIDES.reduce(
+      (sum, currentSide) =>
+        sum +
+        Object.values(rawBySide[currentSide]).reduce(
+          (sideSum, line) => sideSum + line[PITCH.pitches],
+          0
+        ),
+      0
+    );
+  }
+  return Object.values(rawBySide[side]).reduce(
+    (sum, line) => sum + line[PITCH.pitches],
+    0
+  );
+}
+
+function calculateInvariantDiagnostics(
+  advanced,
+  results,
+  qoc,
+  battedBallMetrics,
+  pitchLocation
+) {
   const diagnostics = { ...advanced.diagnostics };
   for (const side of [...SIDES, "combined"]) {
     const batting = results[side];
@@ -1116,6 +1456,80 @@ function calculateInvariantDiagnostics(advanced, results, qoc, battedBallMetrics
   diagnostics.pitcherAggregationMismatchCount += countInvariant(
     pitcherBF === results.combined.PA
   );
+
+  for (const side of [...SIDES, "combined"]) {
+    const locationLine = getRawPitchLineForSide(
+      advanced.pitchLocation,
+      side
+    );
+    const pitches = locationLine[PITCH.pitches];
+    for (const group of [
+      "attackRegion",
+      "attackRegionDetail",
+      "meatball",
+      "locationCourse",
+      "locationGrid",
+      "locationModel",
+    ]) {
+      diagnostics.pitchLocationAggregationMismatchCount += countInvariant(
+        getRawBreakdownPitchTotal(advanced[group], side) === pitches
+      );
+    }
+
+    const heart = getRawBreakdownPitchCount(
+      advanced.attackRegion,
+      side,
+      "HEART"
+    );
+    const shadowIn = getRawBreakdownPitchCount(
+      advanced.attackRegionDetail,
+      side,
+      "SHADOW_IN"
+    );
+    const shadowOut = getRawBreakdownPitchCount(
+      advanced.attackRegionDetail,
+      side,
+      "SHADOW_OUT"
+    );
+    const chase = getRawBreakdownPitchCount(
+      advanced.attackRegion,
+      side,
+      "CHASE"
+    );
+    const waste = getRawBreakdownPitchCount(
+      advanced.attackRegion,
+      side,
+      "WASTE"
+    );
+    const meatball = getRawBreakdownPitchCount(
+      advanced.meatball,
+      side,
+      "MEATBALL"
+    );
+    const legacyPitches = getRawBreakdownPitchCount(
+      advanced.locationModel,
+      side,
+      PITCH_LOCATION_CONFIG.legacyGridCompatibility.locationModel
+    );
+
+    diagnostics.pitchLocationAggregationMismatchCount +=
+      countInvariant(
+        heart + shadowIn === locationLine[PITCH.zonePitches]
+      ) +
+      countInvariant(
+        shadowOut + chase + waste ===
+          locationLine[PITCH.outOfZonePitches]
+      ) +
+      countInvariant(meatball <= heart) +
+      countInvariant(
+        pitchLocation[side].edgePct === pitchLocation[side].shadowPct
+      );
+    if (pitches > 0 && legacyPitches === pitches) {
+      diagnostics.pitchLocationAggregationMismatchCount += countInvariant(
+        chase === 0
+      );
+    }
+  }
   return diagnostics;
 }
 
@@ -1158,6 +1572,37 @@ export function finalizeAdvancedMeasurement(
       finalizePitchLine
     ),
     course: finalizeCourse(advanced.course),
+    attackRegion: finalizePitchLocationGroup(
+      advanced.attackRegion,
+      MEASUREMENT_ATTACK_REGIONS,
+      plateDiscipline
+    ),
+    attackRegionDetail: finalizePitchLocationGroup(
+      advanced.attackRegionDetail,
+      MEASUREMENT_ATTACK_REGION_DETAILS,
+      plateDiscipline
+    ),
+    meatball: finalizePitchLocationGroup(
+      advanced.meatball,
+      MEASUREMENT_MEATBALL_KEYS,
+      plateDiscipline
+    ),
+    locationCourse: finalizePitchLocationGroup(
+      advanced.locationCourse,
+      MEASUREMENT_LOCATION_COURSES,
+      plateDiscipline
+    ),
+    locationGrid: finalizePitchLocationGroup(
+      advanced.locationGrid,
+      MEASUREMENT_LOCATION_GRID_KEYS,
+      plateDiscipline,
+      decorateLocationGrid
+    ),
+    locationModel: finalizePitchLocationGroup(
+      advanced.locationModel,
+      null,
+      plateDiscipline
+    ),
     strikeType: finalizeGroupedBySide(
       advanced.strikeType,
       null,
@@ -1205,8 +1650,15 @@ export function finalizeAdvancedMeasurement(
     }
   }
 
+  const pitchLocation = buildPitchLocationSummary(
+    advanced,
+    plateDiscipline,
+    breakdowns
+  );
+
   return {
     plateDiscipline,
+    pitchLocation,
     battingProfiles,
     breakdowns,
     smoothingDiagnostics: finalizeSmoothing(advanced.smoothing),
@@ -1217,7 +1669,8 @@ export function finalizeAdvancedMeasurement(
       advanced,
       results,
       qoc,
-      battedBallMetrics
+      battedBallMetrics,
+      pitchLocation
     ),
   };
 }

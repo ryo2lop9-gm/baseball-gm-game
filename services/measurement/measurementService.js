@@ -20,7 +20,7 @@ import {
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
-export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 2;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 3;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -587,6 +587,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
     battedBallMetrics,
     gameDistribution: advanced.gameDistribution,
     plateDiscipline: advanced.plateDiscipline,
+    pitchLocation: advanced.pitchLocation,
     contactDisposition,
     referenceBenchmark,
     referenceComparison,

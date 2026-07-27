@@ -4,7 +4,7 @@ import {
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
 
-export const MEASUREMENT_REPORT_SCHEMA_VERSION = 2;
+export const MEASUREMENT_REPORT_SCHEMA_VERSION = 3;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
@@ -191,6 +191,22 @@ export function getMeasurementDefinitions() {
       "Course Breakdown uses the resolved course passed to EV/LA generation and pitch probabilities: A, B, C, Ball, or unknown.",
     zoneClassification:
       "Zone% uses isStrike. Course and the zone decision are separate concepts, so an out-of-zone pitch may retain course A/B/C and a zone pitch may retain course Ball.",
+    pitchLocation: {
+      geometricZonePct:
+        "Geometric Zone% uses actualIsZone from the pitch-location event.",
+      attackRegions:
+        "Heart, Shadow/Edge, Chase Region, and Waste use the event's attackRegion classification; Edge% equals Shadow%.",
+      shadowDetail:
+        "Shadow-In is the in-zone part of Shadow and Shadow-Out is the out-of-zone part.",
+      meatball:
+        "Meatball is the central Heart subset and Meatball% uses all pitches as its denominator.",
+      chaseVsChaseRegion:
+        "Chase% is swings at all out-of-zone pitches divided by all out-of-zone pitches; Chase Region% is pitches classified with attackRegion CHASE divided by all pitches.",
+      courseVsLocationCourse:
+        "course is the resolved course used by existing pitch probabilities; locationCourse is the A/B/C/Ball label derived from actualPoint.",
+      legacyGridCompatibility:
+        "legacy_grid_compat uses deterministic compatibility anchors, not a continuous MLB pitch distribution, and its current anchors do not generate the Chase region.",
+    },
     battedBallClasses: {
       GB: "launch angle < 10 degrees",
       LD: "10 <= launch angle < 25 degrees",
@@ -288,6 +304,7 @@ export function buildMeasurementReportObject({
     results,
     gameDistribution: summary?.gameDistribution || {},
     plateDiscipline: summary?.plateDiscipline || {},
+    pitchLocation: summary?.pitchLocation || {},
     batting: results,
     pitching: buildPitchingSummary(pitchers),
     players: summary?.players || { away: [], home: [] },
@@ -780,6 +797,13 @@ export function buildMeasurementMarkdown(options) {
     "",
     `- Course Breakdown: ${definitions.courseBreakdown}`,
     `- Zone classification: ${definitions.zoneClassification}`,
+    `- Geometric Zone%: ${definitions.pitchLocation.geometricZonePct}`,
+    `- Attack Regions: ${definitions.pitchLocation.attackRegions}`,
+    `- Shadow-In / Shadow-Out: ${definitions.pitchLocation.shadowDetail}`,
+    `- Meatball: ${definitions.pitchLocation.meatball}`,
+    `- Chase% vs Chase Region%: ${definitions.pitchLocation.chaseVsChaseRegion}`,
+    `- course vs locationCourse: ${definitions.pitchLocation.courseVsLocationCourse}`,
+    `- legacy_grid_compat: ${definitions.pitchLocation.legacyGridCompatibility}`,
     `- AIR: ${definitions.battedBallClasses.AIR}`,
     "",
     "## AIへの確認依頼 / AI Review Request",

@@ -199,7 +199,7 @@ test("reference comparison marks approximate and unavailable rows explicitly", (
   assert.equal(barrel.accuracy, "not_comparable");
 });
 
-test("schema v2 Markdown and JSON include preset, benchmark, comparison, and disposition", async () => {
+test("schema v3 Markdown and JSON include preset, benchmark, comparison, and disposition", async () => {
   const teams = createGmBasicReferenceValidationTeams();
   const summary = await runMeasurementBatches({
     awayTeam: teams.away,
@@ -221,7 +221,7 @@ test("schema v2 Markdown and JSON include preset, benchmark, comparison, and dis
   const json = buildMeasurementJson(options);
   const parsed = JSON.parse(json);
 
-  assert.equal(report.reportSchemaVersion, 2);
+  assert.equal(report.reportSchemaVersion, 3);
   assert.equal(report.validationPreset, "gm_basic_symmetric_reference");
   assert.equal(report.referenceBenchmark.season, 2025);
   assert.ok(report.referenceComparison.length >= 25);
@@ -236,7 +236,7 @@ test("schema v2 Markdown and JSON include preset, benchmark, comparison, and dis
   }
   assert.match(markdown, /validationPreset: gm_basic_symmetric_reference/);
   assert.doesNotMatch(json, /NaN|Infinity|undefined/);
-  assert.equal(parsed.reportSchemaVersion, 2);
+  assert.equal(parsed.reportSchemaVersion, 3);
   assert.equal(parsed.validationPreset, "gm_basic_symmetric_reference");
 });
 
