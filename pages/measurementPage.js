@@ -1,5 +1,5 @@
-import { getMeasurementDom } from "./measurementDom.js?v=codex11-2";
-import { renderMeasurementPage } from "../render/measurementRender.js?v=codex11-2";
+import { getMeasurementDom } from "./measurementDom.js?v=codex12-4";
+import { renderMeasurementPage } from "../render/measurementRender.js?v=codex12-4";
 import {
   MAX_MEASUREMENT_GAMES,
   normalizeMeasurementGameCount,
@@ -8,7 +8,7 @@ import { createMeasurementRunner } from "../services/measurement/measurementRunn
 import {
   buildMeasurementJson,
   buildMeasurementMarkdown,
-} from "../services/measurement/measurementReportService.js?v=codex11-2";
+} from "../services/measurement/measurementReportService.js?v=codex12-4";
 import {
   DEFAULT_MEASUREMENT_SEED,
   normalizeSeed,

@@ -9,6 +9,25 @@ export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
 ]);
+export const MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS = Object.freeze({
+  attackRegion: Object.freeze([
+    "HEART",
+    "SHADOW",
+    "CHASE",
+    "WASTE",
+    "unknown",
+  ]),
+  attackRegionDetail: Object.freeze([
+    "HEART",
+    "SHADOW_IN",
+    "SHADOW_OUT",
+    "CHASE",
+    "WASTE",
+    "unknown",
+  ]),
+  meatball: Object.freeze(["MEATBALL", "NON_MEATBALL", "unknown"]),
+  locationCourse: Object.freeze(["A", "B", "C", "Ball", "unknown"]),
+});
 
 function safeDivide(numerator, denominator) {
   return denominator > 0 ? numerator / denominator : 0;
@@ -336,7 +355,8 @@ function formatNumber(value, digits = 3) {
 }
 
 function formatPct(value) {
-  return `${(Number(value || 0) * 100).toFixed(2)}%`;
+  const number = Number(value);
+  return `${(Number.isFinite(number) ? number * 100 : 0).toFixed(2)}%`;
 }
 
 function averageRating(lineup, key) {
@@ -426,6 +446,115 @@ function plateDisciplineTable(data) {
         : formatNumber(data?.[side]?.[key]);
       return `| ${label} | ${value("away")} | ${value("home")} | ${value("combined")} |`;
     }),
+  ];
+}
+
+function pitchLocationSummaryTable(data) {
+  const rows = [
+    ["Pitches", "pitches"],
+    ["Geometric Zone%", "geometricZonePct", true],
+    ["Result Strike%", "resultStrikePct", true],
+    ["Called Strike%", "calledStrikePct", true],
+    ["Chase%", "chasePct", true],
+    ["Heart%", "heartPct", true],
+    ["Shadow / Edge%", "shadowPct", true],
+    ["Shadow-In%", "shadowInPct", true],
+    ["Shadow-Out%", "shadowOutPct", true],
+    ["Chase Region%", "chaseRegionPct", true],
+    ["Waste%", "wastePct", true],
+    ["Meatball%", "meatballPct", true],
+  ];
+  return [
+    "| Item | Away batting | Home batting | Combined |",
+    "| --- | ---: | ---: | ---: |",
+    ...rows.map(([label, key, percentage]) => {
+      const display = (side) =>
+        percentage
+          ? formatPct(data?.[side]?.[key])
+          : formatNumber(data?.[side]?.[key]);
+      return `| ${label} | ${display("away")} | ${display(
+        "home"
+      )} | ${display("combined")} |`;
+    }),
+  ];
+}
+
+function pitchLocationCompatibilityLines(pitchLocation) {
+  const compatibility = pitchLocation?.compatibility || {};
+  const lines = [
+    `- activeLocationModel: ${mdCell(
+      compatibility.activeLocationModel || "unknown"
+    )}`,
+    `- legacyGridCompatNoChaseByDesign: ${Boolean(
+      compatibility.legacyGridCompatNoChaseByDesign
+    )}`,
+    `- continuousLocationDistributionAvailable: ${Boolean(
+      compatibility.continuousLocationDistributionAvailable
+    )}`,
+    "- Chase% is the swing rate on all out-of-zone pitches; Chase Region% is the share of all pitches classified in the CHASE region.",
+  ];
+  if (
+    compatibility.activeLocationModel === "legacy_grid_compat" &&
+    compatibility.legacyGridCompatNoChaseByDesign === true
+  ) {
+    lines.push(
+      "- legacy_grid_compat uses deterministic 5×5 compatibility anchors rather than a continuous MLB pitch-location distribution; Chase Region 0 is expected and does not mean Chase% is 0."
+    );
+  }
+  return lines;
+}
+
+function pitchLocationBreakdownTable(title, group, keys = null) {
+  const combined = group?.combined || {};
+  const orderedKeys = keys || Object.keys(combined);
+  return [
+    `### ${title}`,
+    "",
+    "| Group | Pitches | Pitch% | Zone% | Swing% | Contact% | Whiff% | CSW% | PA | AVG | OBP | SLG | OPS |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...orderedKeys.map((key) => {
+      const value = combined[key] || {};
+      return `| ${mdCell(key)} | ${formatNumber(value.pitches)} | ${formatPct(
+        value.pitchPct
+      )} | ${formatPct(value.zonePct)} | ${formatPct(
+        value.swingPct
+      )} | ${formatPct(value.contactPct)} | ${formatPct(
+        value.whiffPct
+      )} | ${formatPct(value.cswPct)} | ${formatNumber(
+        value.PA
+      )} | ${formatNumber(value.AVG)} | ${formatNumber(
+        value.OBP
+      )} | ${formatNumber(value.SLG)} | ${formatNumber(value.OPS)} |`;
+    }),
+  ];
+}
+
+function locationGridBreakdownTable(group) {
+  const combined = group?.combined || {};
+  const rows = [];
+  for (let row = 0; row <= 4; row += 1) {
+    for (let col = 0; col <= 4; col += 1) {
+      const key = `r${row}c${col}`;
+      const value = combined[key] || {};
+      rows.push(
+        `| ${key} | ${row} | ${col} | ${formatNumber(
+          value.pitches
+        )} | ${formatPct(value.pitchPct)} | ${formatPct(
+          value.swingPct
+        )} | ${formatPct(value.contactPct)} | ${formatPct(
+          value.whiffPct
+        )} | ${formatPct(value.cswPct)} | ${formatNumber(
+          value.AVG
+        )} | ${formatNumber(value.OPS)} |`
+      );
+    }
+  }
+  return [
+    "### Location Grid",
+    "",
+    "| Grid | Row | Col | Pitches | Pitch% | Swing% | Contact% | Whiff% | CSW% | AVG | OPS |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...rows,
   ];
 }
 
@@ -645,7 +774,7 @@ export function buildMeasurementMarkdown(options) {
     plateDiscipline, battedBallProfiles, breakdowns, smoothingDiagnostics,
     players, pitchers, gameDistribution, definitions, modelLimitations,
     validationPreset, validationPresetLabel, referenceBenchmark,
-    referenceComparison, contactDisposition,
+    referenceComparison, contactDisposition, pitchLocation,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -706,6 +835,47 @@ export function buildMeasurementMarkdown(options) {
     "## Plate Discipline",
     "",
     ...plateDisciplineTable(plateDiscipline),
+    "",
+    "## Pitch Location Summary",
+    "",
+    ...pitchLocationSummaryTable(pitchLocation),
+    "",
+    "### Compatibility",
+    "",
+    ...pitchLocationCompatibilityLines(pitchLocation),
+    "",
+    "## Pitch Location Breakdowns",
+    "",
+    ...pitchLocationBreakdownTable(
+      "Attack Region",
+      breakdowns.attackRegion,
+      MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.attackRegion
+    ),
+    "",
+    ...pitchLocationBreakdownTable(
+      "Attack Region Detail",
+      breakdowns.attackRegionDetail,
+      MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.attackRegionDetail
+    ),
+    "",
+    ...pitchLocationBreakdownTable(
+      "Meatball",
+      breakdowns.meatball,
+      MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.meatball
+    ),
+    "",
+    ...pitchLocationBreakdownTable(
+      "Location Course",
+      breakdowns.locationCourse,
+      MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.locationCourse
+    ),
+    "",
+    ...locationGridBreakdownTable(breakdowns.locationGrid),
+    "",
+    ...pitchLocationBreakdownTable(
+      "Location Model",
+      breakdowns.locationModel
+    ),
     "",
     "## EV/LA Batted Ball Profile",
     "",
@@ -808,7 +978,7 @@ export function buildMeasurementMarkdown(options) {
     "",
     "## AIへの確認依頼 / AI Review Request",
     "",
-    "Please review run scoring and slash lines, plate discipline, EV/LA profile, pitch/count splits, smoothing modes, player/pitcher distributions, invariant diagnostics, and model limitations. Identify suspicious values and the next parameter to investigate without treating unavailable metrics as zero.",
+    "Please review run scoring and slash lines, Pitch Location distribution and batting results by region, plate discipline, EV/LA profile, pitch/count splits, smoothing modes, player/pitcher distributions, invariant diagnostics, and model limitations. Do not confuse Chase% with Chase Region%, and do not treat a legacy_grid_compat Chase Region value of 0 as a defect. Identify suspicious values and the next parameter to investigate without treating unavailable metrics as zero.",
   ];
   return lines.join("\n");
 }

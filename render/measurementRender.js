@@ -1,7 +1,66 @@
 import {
+  MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS,
   getMeasurementDefinitions,
   getMeasurementModelLimitations,
-} from "../services/measurement/measurementReportService.js?v=codex11-2";
+} from "../services/measurement/measurementReportService.js?v=codex12-4";
+
+export const PITCH_LOCATION_ATTACK_REGION_ORDER =
+  MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.attackRegion;
+export const PITCH_LOCATION_ATTACK_REGION_DETAIL_ORDER =
+  MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.attackRegionDetail;
+export const PITCH_LOCATION_MEATBALL_ORDER =
+  MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.meatball;
+export const PITCH_LOCATION_COURSE_ORDER =
+  MEASUREMENT_PITCH_LOCATION_DISPLAY_ORDERS.locationCourse;
+
+const PITCH_LOCATION_KPI_DEFINITIONS = Object.freeze([
+  {
+    key: "geometricZonePct",
+    label: "Geometric Zone%",
+    definition: "actualIsZone基準",
+  },
+  { key: "heartPct", label: "Heart%", definition: "Heart領域への投球割合" },
+  {
+    key: "shadowPct",
+    label: "Shadow / Edge%",
+    definition: "Shadow%とEdge%は同じ値",
+  },
+  {
+    key: "shadowInPct",
+    label: "Shadow-In%",
+    definition: "ゾーン内側のShadow",
+  },
+  {
+    key: "shadowOutPct",
+    label: "Shadow-Out%",
+    definition: "ゾーン外側のShadow",
+  },
+  {
+    key: "chasePct",
+    label: "Chase%",
+    definition: "ゾーン外球へのスイング率",
+  },
+  {
+    key: "chaseRegionPct",
+    label: "Chase Region%",
+    definition: "CHASE領域への投球割合",
+  },
+  { key: "wastePct", label: "Waste%", definition: "Waste領域への投球割合" },
+  {
+    key: "meatballPct",
+    label: "Meatball%",
+    definition: "Heartの中央部分集合",
+  },
+]);
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function clampUnit(value) {
+  return Math.min(1, Math.max(0, finiteNumber(value)));
+}
 
 function setText(element, value) {
   if (element) element.textContent = String(value ?? "-");
@@ -14,7 +73,7 @@ function formatNumber(value, digits = 3) {
 }
 
 function formatPct(value) {
-  return `${(Number(value || 0) * 100).toFixed(2)}%`;
+  return `${(finiteNumber(value) * 100).toFixed(2)}%`;
 }
 
 function formatOptional(value, format = "rate", signed = false) {
@@ -56,6 +115,323 @@ function renderTable(container, headers, rows) {
 
   table.append(tbody);
   container.replaceChildren(table);
+}
+
+export function buildPitchLocationKpiData(pitchLocation = {}) {
+  return PITCH_LOCATION_KPI_DEFINITIONS.map(({ key, label, definition }) => ({
+    key,
+    label,
+    definition,
+    away: finiteNumber(pitchLocation?.away?.[key]),
+    home: finiteNumber(pitchLocation?.home?.[key]),
+    combined: finiteNumber(pitchLocation?.combined?.[key]),
+  }));
+}
+
+export function buildLocationGridCellData(locationGrid = {}) {
+  const combined = locationGrid?.combined || {};
+  const cells = [];
+  let maximumPitchPct = 0;
+
+  for (let row = 0; row <= 4; row += 1) {
+    for (let col = 0; col <= 4; col += 1) {
+      const key = `r${row}c${col}`;
+      const line = combined[key] || {};
+      const pitchPct = Math.max(0, finiteNumber(line.pitchPct));
+      maximumPitchPct = Math.max(maximumPitchPct, pitchPct);
+      cells.push({
+        key,
+        row,
+        col,
+        pitches: Math.max(0, finiteNumber(line.pitches)),
+        pitchPct,
+        swingPct: finiteNumber(line.swingPct),
+        isGeometricZone: row >= 1 && row <= 3 && col >= 1 && col <= 3,
+      });
+    }
+  }
+
+  return cells.map((cell) => ({
+    ...cell,
+    colorIntensity:
+      maximumPitchPct > 0 ? clampUnit(cell.pitchPct / maximumPitchPct) : 0,
+  }));
+}
+
+export function buildPitchLocationBreakdownRows(group = {}, keys = null) {
+  const combined = group?.combined || {};
+  const orderedKeys = keys || Object.keys(combined);
+  return orderedKeys.map((key) => {
+    const line = combined[key] || {};
+    return {
+      key,
+      pitches: Math.max(0, finiteNumber(line.pitches)),
+      pitchPct: finiteNumber(line.pitchPct),
+      zonePct: finiteNumber(line.zonePct),
+      swingPct: finiteNumber(line.swingPct),
+      contactPct: finiteNumber(line.contactPct),
+      whiffPct: finiteNumber(line.whiffPct),
+      cswPct: finiteNumber(line.cswPct),
+      PA: Math.max(0, finiteNumber(line.PA)),
+      AVG: finiteNumber(line.AVG),
+      OBP: finiteNumber(line.OBP),
+      SLG: finiteNumber(line.SLG),
+      OPS: finiteNumber(line.OPS),
+    };
+  });
+}
+
+export function buildLocationGridBreakdownRows(locationGrid = {}) {
+  const combined = locationGrid?.combined || {};
+  return buildLocationGridCellData(locationGrid).map(({ key, row, col }) => {
+    const line = combined[key] || {};
+    return {
+      key,
+      row,
+      col,
+      pitches: Math.max(0, finiteNumber(line.pitches)),
+      pitchPct: finiteNumber(line.pitchPct),
+      swingPct: finiteNumber(line.swingPct),
+      contactPct: finiteNumber(line.contactPct),
+      whiffPct: finiteNumber(line.whiffPct),
+      cswPct: finiteNumber(line.cswPct),
+      AVG: finiteNumber(line.AVG),
+      OPS: finiteNumber(line.OPS),
+    };
+  });
+}
+
+function renderPitchLocationKpis(container, pitchLocation) {
+  if (!container) return;
+  const fragment = document.createDocumentFragment();
+  for (const metric of buildPitchLocationKpiData(pitchLocation)) {
+    const card = document.createElement("article");
+    card.className = "measurement-pitch-location-kpi";
+    card.dataset.metric = metric.key;
+
+    const label = document.createElement("div");
+    label.className = "measurement-kpi-label";
+    label.textContent = metric.label;
+
+    const combined = document.createElement("div");
+    combined.className = "measurement-pitch-location-value";
+    combined.textContent = formatPct(metric.combined);
+
+    const sides = document.createElement("div");
+    sides.className = "measurement-pitch-location-sides";
+    sides.textContent = `Away ${formatPct(metric.away)} / Home ${formatPct(metric.home)}`;
+
+    const definition = document.createElement("div");
+    definition.className = "section-note";
+    definition.textContent = metric.definition;
+
+    card.append(label, combined, sides, definition);
+    fragment.append(card);
+  }
+  container.replaceChildren(fragment);
+}
+
+function renderPitchLocationCompatibility(container, pitchLocation) {
+  if (!container) return;
+  const compatibility = pitchLocation?.compatibility || {};
+  const fragment = document.createDocumentFragment();
+  const values = document.createElement("dl");
+  values.className = "measurement-compatibility-values";
+
+  for (const [label, value] of [
+    ["activeLocationModel", compatibility.activeLocationModel || "unknown"],
+    [
+      "legacyGridCompatNoChaseByDesign",
+      Boolean(compatibility.legacyGridCompatNoChaseByDesign),
+    ],
+    [
+      "continuousLocationDistributionAvailable",
+      Boolean(compatibility.continuousLocationDistributionAvailable),
+    ],
+  ]) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = String(value);
+    values.append(term, description);
+  }
+  fragment.append(values);
+
+  if (
+    compatibility.activeLocationModel === "legacy_grid_compat" &&
+    compatibility.legacyGridCompatNoChaseByDesign === true
+  ) {
+    const note = document.createElement("p");
+    note.className = "measurement-compatibility-note";
+    note.textContent =
+      "legacy_grid_compatは5×5セルから作った決定的な互換アンカーで、連続的なMLB投球位置分布ではありません。Chase Regionが0になるのは現在のアンカー設計上の正常動作であり、Chase%が0であることを意味しません。";
+    fragment.append(note);
+  }
+  container.replaceChildren(fragment);
+}
+
+function renderLocationGrid(container, locationGrid) {
+  if (!container) return;
+  const fragment = document.createDocumentFragment();
+  for (const cellData of buildLocationGridCellData(locationGrid)) {
+    const cell = document.createElement("div");
+    cell.className = `measurement-location-cell${
+      cellData.isGeometricZone ? " geometric-zone-cell" : ""
+    }`;
+    cell.dataset.row = String(cellData.row);
+    cell.dataset.col = String(cellData.col);
+    cell.dataset.gridKey = cellData.key;
+    cell.setAttribute("role", "gridcell");
+    cell.style.setProperty(
+      "--location-intensity",
+      String(cellData.colorIntensity)
+    );
+    cell.style.backgroundColor = `rgba(37, 99, 235, ${(
+      0.08 +
+      cellData.colorIntensity * 0.62
+    ).toFixed(3)})`;
+    cell.setAttribute(
+      "aria-label",
+      `row ${cellData.row}, col ${cellData.col}: Pitch ${formatPct(
+        cellData.pitchPct
+      )}, n=${cellData.pitches}, Swing ${formatPct(cellData.swingPct)}`
+    );
+
+    const pitchPct = document.createElement("strong");
+    pitchPct.textContent = formatPct(cellData.pitchPct);
+    const pitches = document.createElement("span");
+    pitches.textContent = `n=${cellData.pitches}`;
+    const swingPct = document.createElement("span");
+    swingPct.textContent = `Swing ${formatPct(cellData.swingPct)}`;
+    cell.append(pitchPct, pitches, swingPct);
+    fragment.append(cell);
+  }
+  container.replaceChildren(fragment);
+}
+
+function renderPitchLocationBreakdownTable(container, group, keys) {
+  const rows = buildPitchLocationBreakdownRows(group, keys).map((row) => [
+    row.key,
+    row.pitches,
+    formatPct(row.pitchPct),
+    formatPct(row.zonePct),
+    formatPct(row.swingPct),
+    formatPct(row.contactPct),
+    formatPct(row.whiffPct),
+    formatPct(row.cswPct),
+    row.PA,
+    formatNumber(row.AVG),
+    formatNumber(row.OBP),
+    formatNumber(row.SLG),
+    formatNumber(row.OPS),
+  ]);
+  renderTable(
+    container,
+    [
+      "Group",
+      "Pitches",
+      "Pitch%",
+      "Zone%",
+      "Swing%",
+      "Contact%",
+      "Whiff%",
+      "CSW%",
+      "PA",
+      "AVG",
+      "OBP",
+      "SLG",
+      "OPS",
+    ],
+    rows
+  );
+}
+
+function renderLocationGridBreakdownTable(container, locationGrid) {
+  const rows = buildLocationGridBreakdownRows(locationGrid).map((row) => [
+    row.key,
+    row.row,
+    row.col,
+    row.pitches,
+    formatPct(row.pitchPct),
+    formatPct(row.swingPct),
+    formatPct(row.contactPct),
+    formatPct(row.whiffPct),
+    formatPct(row.cswPct),
+    formatNumber(row.AVG),
+    formatNumber(row.OPS),
+  ]);
+  renderTable(
+    container,
+    [
+      "Grid",
+      "Row",
+      "Col",
+      "Pitches",
+      "Pitch%",
+      "Swing%",
+      "Contact%",
+      "Whiff%",
+      "CSW%",
+      "AVG",
+      "OPS",
+    ],
+    rows
+  );
+}
+
+export function renderPitchLocation(dom, summary) {
+  const containers = [
+    dom.pitchLocationKpis,
+    dom.pitchLocationCompatibility,
+    dom.locationGrid,
+    dom.attackRegionBreakdown,
+    dom.attackRegionDetailBreakdown,
+    dom.meatballBreakdown,
+    dom.locationCourseBreakdown,
+    dom.locationGridBreakdown,
+    dom.locationModelBreakdown,
+  ];
+  if (!summary) {
+    for (const container of containers) container?.replaceChildren();
+    return;
+  }
+
+  const breakdowns = summary.breakdowns || {};
+  renderPitchLocationKpis(dom.pitchLocationKpis, summary.pitchLocation || {});
+  renderPitchLocationCompatibility(
+    dom.pitchLocationCompatibility,
+    summary.pitchLocation || {}
+  );
+  renderLocationGrid(dom.locationGrid, breakdowns.locationGrid);
+  renderPitchLocationBreakdownTable(
+    dom.attackRegionBreakdown,
+    breakdowns.attackRegion,
+    PITCH_LOCATION_ATTACK_REGION_ORDER
+  );
+  renderPitchLocationBreakdownTable(
+    dom.attackRegionDetailBreakdown,
+    breakdowns.attackRegionDetail,
+    PITCH_LOCATION_ATTACK_REGION_DETAIL_ORDER
+  );
+  renderPitchLocationBreakdownTable(
+    dom.meatballBreakdown,
+    breakdowns.meatball,
+    PITCH_LOCATION_MEATBALL_ORDER
+  );
+  renderPitchLocationBreakdownTable(
+    dom.locationCourseBreakdown,
+    breakdowns.locationCourse,
+    PITCH_LOCATION_COURSE_ORDER
+  );
+  renderLocationGridBreakdownTable(
+    dom.locationGridBreakdown,
+    breakdowns.locationGrid
+  );
+  renderPitchLocationBreakdownTable(
+    dom.locationModelBreakdown,
+    breakdowns.locationModel,
+    null
+  );
 }
 
 function renderKpis(container, summary) {
@@ -506,6 +882,13 @@ function renderLimitations(container) {
   for (const text of [
     definitions.courseBreakdown,
     definitions.zoneClassification,
+    definitions.pitchLocation.geometricZonePct,
+    definitions.pitchLocation.attackRegions,
+    definitions.pitchLocation.shadowDetail,
+    definitions.pitchLocation.meatball,
+    definitions.pitchLocation.chaseVsChaseRegion,
+    definitions.pitchLocation.courseVsLocationCourse,
+    definitions.pitchLocation.legacyGridCompatibility,
     `AIR: ${definitions.battedBallClasses.AIR}`,
   ]) {
     const line = document.createElement("li");
@@ -539,6 +922,15 @@ function renderAdvancedDiagnostics(dom, summary) {
     for (const container of [
       dom.gameDistribution,
       dom.plateDiscipline,
+      dom.pitchLocationKpis,
+      dom.pitchLocationCompatibility,
+      dom.locationGrid,
+      dom.attackRegionBreakdown,
+      dom.attackRegionDetailBreakdown,
+      dom.meatballBreakdown,
+      dom.locationCourseBreakdown,
+      dom.locationGridBreakdown,
+      dom.locationModelBreakdown,
       dom.battedProfile,
       dom.countBreakdown,
       dom.pitchTypeBreakdown,
@@ -559,6 +951,7 @@ function renderAdvancedDiagnostics(dom, summary) {
   }
   renderGameDistribution(dom.gameDistribution, summary.gameDistribution);
   renderPlateDiscipline(dom.plateDiscipline, summary.plateDiscipline);
+  renderPitchLocation(dom, summary);
   renderBattedProfile(dom.battedProfile, summary.battingProfiles);
   renderPitchBreakdown(dom.countBreakdown, summary.breakdowns?.count);
   renderPitchTypeBreakdown(dom.pitchTypeBreakdown, summary.breakdowns?.pitchType);

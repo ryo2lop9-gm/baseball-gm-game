@@ -697,6 +697,10 @@
       border-bottom: 1px solid var(--line);
     }
 
+    .measurement-team-item .summary-value {
+      overflow-wrap: anywhere;
+    }
+
     .measurement-kpi-label {
       color: var(--muted);
       font-size: 11px;
@@ -724,6 +728,112 @@
     }
 
     .measurement-table-scroll table { min-width: 520px; }
+
+    .measurement-pitch-location-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .measurement-pitch-location-kpi {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.025);
+    }
+
+    .measurement-pitch-location-value {
+      margin-top: 7px;
+      font-size: clamp(20px, 3vw, 28px);
+      font-weight: 850;
+      letter-spacing: -0.02em;
+    }
+
+    .measurement-pitch-location-sides {
+      margin: 4px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .measurement-compatibility {
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid rgba(96,165,250,0.35);
+      border-radius: 12px;
+      background: rgba(59,130,246,0.08);
+    }
+
+    .measurement-compatibility-values {
+      display: grid;
+      grid-template-columns: minmax(180px, max-content) minmax(0, 1fr);
+      gap: 5px 14px;
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .measurement-compatibility-values dt {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .measurement-compatibility-values dd {
+      margin: 0;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .measurement-compatibility-note {
+      margin: 10px 0 0;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .measurement-location-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
+      width: min(100%, 620px);
+      margin: 14px auto 0;
+    }
+
+    .measurement-location-cell {
+      display: flex;
+      min-width: 0;
+      aspect-ratio: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 4px 2px;
+      overflow: hidden;
+      border: 1px solid rgba(148,163,184,0.4);
+      border-radius: 7px;
+      text-align: center;
+    }
+
+    .measurement-location-cell strong {
+      font-size: clamp(12px, 2.2vw, 18px);
+      line-height: 1.1;
+    }
+
+    .measurement-location-cell span {
+      max-width: 100%;
+      font-size: clamp(8px, 1.45vw, 11px);
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .measurement-location-cell.geometric-zone-cell {
+      border-color: #93c5fd;
+      box-shadow: inset 0 0 0 1px rgba(147,197,253,0.7);
+    }
+
+    .measurement-location-breakdown-stack h4 {
+      margin: 4px 0 8px;
+    }
 
     .measurement-progress {
       width: 100%;
@@ -814,7 +924,8 @@
       .tuning-metric-grid,
       .measurement-team-grid,
       .measurement-status-grid,
-      .measurement-kpi-grid {
+      .measurement-kpi-grid,
+      .measurement-pitch-location-kpis {
         grid-template-columns: 1fr 1fr;
       }
     }
@@ -828,8 +939,18 @@
       .measurement-controls,
       .measurement-team-grid,
       .measurement-status-grid,
-      .measurement-kpi-grid {
+      .measurement-kpi-grid,
+      .measurement-pitch-location-kpis {
         grid-template-columns: 1fr;
+      }
+
+      .measurement-compatibility-values {
+        grid-template-columns: 1fr;
+        gap: 2px;
+      }
+
+      .measurement-compatibility-values dd {
+        margin-bottom: 6px;
       }
 
       .score-strip {
@@ -1452,6 +1573,52 @@
           <div class="measurement-table-scroll"><div id="measurementPlateDiscipline"></div></div>
         </details>
 
+        <section class="card">
+          <h3 class="panel-title">Pitch Location / 投球位置</h3>
+          <ul class="section-note">
+            <li>Away／Homeは投球側ではなく打撃側を表します。</li>
+            <li>Geometric Zone%はactualIsZone基準です。</li>
+            <li>Chase%はゾーン外球へのスイング率、Chase Region%はCHASE領域への投球割合です。</li>
+            <li>Shadow%とEdge%は同じ値で、MeatballはHeartの部分集合です。</li>
+          </ul>
+          <div id="measurementPitchLocationKpis" class="measurement-pitch-location-kpis"></div>
+          <div id="measurementPitchLocationCompatibility" class="measurement-compatibility"></div>
+          <h4 style="margin:18px 0 0;">5×5互換グリッド</h4>
+          <p class="section-note">連続座標ヒートマップではありません。枠線内の3×3が幾何学的ストライクゾーンです。</p>
+          <div id="measurementLocationGrid" class="measurement-location-grid" role="grid" aria-label="5×5 pitch location compatibility grid"></div>
+        </section>
+
+        <details class="card measurement-details">
+          <summary>Pitch Location Breakdowns</summary>
+          <div class="measurement-stack measurement-location-breakdown-stack">
+            <div>
+              <h4>Attack Region</h4>
+              <div class="measurement-table-scroll"><div id="measurementAttackRegionBreakdown"></div></div>
+            </div>
+            <div>
+              <h4>Attack Region Detail</h4>
+              <div class="measurement-table-scroll"><div id="measurementAttackRegionDetailBreakdown"></div></div>
+            </div>
+            <div>
+              <h4>Meatball</h4>
+              <div class="measurement-table-scroll"><div id="measurementMeatballBreakdown"></div></div>
+            </div>
+            <div>
+              <h4>Location Course</h4>
+              <p class="section-note">Courseは既存確率計算に使うresolved course、Location CourseはactualPointから派生した位置分類です。</p>
+              <div class="measurement-table-scroll"><div id="measurementLocationCourseBreakdown"></div></div>
+            </div>
+            <div>
+              <h4>Location Grid</h4>
+              <div class="measurement-table-scroll"><div id="measurementLocationGridBreakdown"></div></div>
+            </div>
+            <div>
+              <h4>Location Model</h4>
+              <div class="measurement-table-scroll"><div id="measurementLocationModelBreakdown"></div></div>
+            </div>
+          </div>
+        </details>
+
         <details class="card measurement-details" open>
           <summary>Batted Ball Profile</summary>
           <div class="measurement-table-scroll"><div id="measurementBattedProfile"></div></div>
@@ -1516,6 +1683,6 @@
     </section>
   </div>
 
-  <script type="module" src="./main.js?v=codex11-2"></script>
+  <script type="module" src="./main.js?v=codex12-4"></script>
 </body>
 </html>

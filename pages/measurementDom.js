@@ -38,6 +38,29 @@ export function getMeasurementDom() {
     qocTable: document.getElementById("measurementQoCTable"),
     gameDistribution: document.getElementById("measurementGameDistribution"),
     plateDiscipline: document.getElementById("measurementPlateDiscipline"),
+    pitchLocationKpis: document.getElementById("measurementPitchLocationKpis"),
+    pitchLocationCompatibility: document.getElementById(
+      "measurementPitchLocationCompatibility"
+    ),
+    locationGrid: document.getElementById("measurementLocationGrid"),
+    attackRegionBreakdown: document.getElementById(
+      "measurementAttackRegionBreakdown"
+    ),
+    attackRegionDetailBreakdown: document.getElementById(
+      "measurementAttackRegionDetailBreakdown"
+    ),
+    meatballBreakdown: document.getElementById(
+      "measurementMeatballBreakdown"
+    ),
+    locationCourseBreakdown: document.getElementById(
+      "measurementLocationCourseBreakdown"
+    ),
+    locationGridBreakdown: document.getElementById(
+      "measurementLocationGridBreakdown"
+    ),
+    locationModelBreakdown: document.getElementById(
+      "measurementLocationModelBreakdown"
+    ),
     battedProfile: document.getElementById("measurementBattedProfile"),
     countBreakdown: document.getElementById("measurementCountBreakdown"),
     pitchTypeBreakdown: document.getElementById("measurementPitchTypeBreakdown"),

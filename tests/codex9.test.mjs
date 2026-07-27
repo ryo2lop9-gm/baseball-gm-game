@@ -657,8 +657,8 @@ test("measurement page is separate and cache-busted module entrypoints stay wire
   assert.match(indexSource, /id="measurementPage"/);
   assert.match(indexSource, /id="showMeasurementPageBtn"/);
   assert.match(indexSource, /no-cache, no-store, must-revalidate/);
-  assert.match(indexSource, /main\.js\?v=codex11-2/);
-  assert.match(mainSource, /appBootstrap\.js\?v=codex11-2/);
+  assert.match(indexSource, /main\.js\?v=codex12-4/);
+  assert.match(mainSource, /appBootstrap\.js\?v=codex12-4/);
   assert.match(bootstrapSource, /appRouter\.js\?v=codex11-2/);
   assert.match(bootstrapSource, /router\.js\?v=codex11-2/);
   assert.match(bootstrapSource, /rootStateFactory\.js\?v=codex11-2/);

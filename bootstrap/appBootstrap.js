@@ -9,7 +9,7 @@ import { loadEvLaLookup } from "../services/evLaLookupStore.js";
 import { createGMDeskPageController } from "../pages/gmDeskPage.js";
 import { createStatsPageController } from "../pages/statsPage.js";
 import { createTuningPageController } from "../pages/tuningPage.js?v=codex11-2";
-import { createMeasurementPageController } from "../pages/measurementPage.js?v=codex11-2";
+import { createMeasurementPageController } from "../pages/measurementPage.js?v=codex12-4";
 
 import { createInitialAppState, createGMDeskFactory } from "./gmBootstrap.js";
 import { createTuningBootstrap } from "./tuningBootstrap.js?v=codex11-2";
