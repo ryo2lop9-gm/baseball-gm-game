@@ -22,6 +22,14 @@ const LEGACY_GRID = Object.freeze({
   lastOutside: 4,
 });
 
+const LEGACY_GRID_COMPATIBILITY = Object.freeze({
+  locationModel: "legacy_grid_compat",
+  invariantErrorCode: "PITCH_LOCATION_COMPATIBILITY_MISMATCH",
+  inZoneAnchor: 5 / 6,
+  edgeOutsideAnchor: 7 / 6,
+  cornerOutsideAnchor: 13 / 6,
+});
+
 // Rectangular attack-region boundaries are based on these public zone references:
 // https://baseballsavant.mlb.com/visuals/swing-take
 // https://tangotiger.net/strikezone/zone%20chart.png
@@ -30,6 +38,7 @@ export const PITCH_LOCATION_CONFIG = Object.freeze({
   defaultStrikeZone: DEFAULT_STRIKE_ZONE,
   normalizedRadiusLimits: NORMALIZED_RADIUS_LIMITS,
   legacyGrid: LEGACY_GRID,
+  legacyGridCompatibility: LEGACY_GRID_COMPATIBILITY,
 });
 
 export { DEFAULT_STRIKE_ZONE };

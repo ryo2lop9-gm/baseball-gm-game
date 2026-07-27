@@ -31,6 +31,80 @@ function validateZoneBounds(zoneBounds) {
   }
 }
 
+function validateLegacyGridIndex(value, label) {
+  const { firstOutside, lastOutside } = PITCH_LOCATION_CONFIG.legacyGrid;
+
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`${label} must be a finite number`);
+  }
+  if (!Number.isInteger(value)) {
+    throw new TypeError(`${label} must be an integer`);
+  }
+  if (value < firstOutside || value > lastOutside) {
+    throw new RangeError(
+      `${label} must be between ${firstOutside} and ${lastOutside}`
+    );
+  }
+}
+
+function getLegacyNormalizedCoordinate(cell, negativeFirst) {
+  const {
+    firstOutside,
+    firstInside,
+    center,
+    lastInside,
+    lastOutside,
+  } = PITCH_LOCATION_CONFIG.legacyGrid;
+  const { inZoneAnchor, edgeOutsideAnchor } =
+    PITCH_LOCATION_CONFIG.legacyGridCompatibility;
+  const firstSign = negativeFirst ? -1 : 1;
+
+  if (cell === firstOutside) return firstSign * edgeOutsideAnchor;
+  if (cell === firstInside) return firstSign * inZoneAnchor;
+  if (cell === center) return 0;
+  if (cell === lastInside) return -firstSign * inZoneAnchor;
+  if (cell === lastOutside) return -firstSign * edgeOutsideAnchor;
+
+  throw new RangeError("legacy grid cell is outside the supported range");
+}
+
+export function createLegacyCompatibleActualPoint(
+  zoneRow,
+  zoneCol,
+  zoneBounds = DEFAULT_STRIKE_ZONE
+) {
+  validateLegacyGridIndex(zoneRow, "zoneRow");
+  validateLegacyGridIndex(zoneCol, "zoneCol");
+  validateZoneBounds(zoneBounds);
+
+  const { firstOutside, lastOutside } = PITCH_LOCATION_CONFIG.legacyGrid;
+  const { cornerOutsideAnchor } =
+    PITCH_LOCATION_CONFIG.legacyGridCompatibility;
+  const rowIsOutside =
+    zoneRow === firstOutside || zoneRow === lastOutside;
+  const colIsOutside =
+    zoneCol === firstOutside || zoneCol === lastOutside;
+  let normalizedX = getLegacyNormalizedCoordinate(zoneCol, true);
+  let normalizedZ = getLegacyNormalizedCoordinate(zoneRow, false);
+
+  // The legacy bridge deliberately emits no Chase anchors. Outer corners map
+  // directly to Waste, without extra draws or distributional correction.
+  if (rowIsOutside && colIsOutside) {
+    normalizedX = Math.sign(normalizedX) * cornerOutsideAnchor;
+    normalizedZ = Math.sign(normalizedZ) * cornerOutsideAnchor;
+  }
+
+  const zoneCenterX = (zoneBounds.xMin + zoneBounds.xMax) / 2;
+  const zoneCenterZ = (zoneBounds.zMin + zoneBounds.zMax) / 2;
+  const zoneHalfWidth = (zoneBounds.xMax - zoneBounds.xMin) / 2;
+  const zoneHalfHeight = (zoneBounds.zMax - zoneBounds.zMin) / 2;
+
+  return {
+    x: zoneCenterX + normalizedX * zoneHalfWidth,
+    z: zoneCenterZ + normalizedZ * zoneHalfHeight,
+  };
+}
+
 function getLegacyColumn(normalizedX) {
   const {
     centerHalfExtent,

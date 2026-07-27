@@ -5,6 +5,11 @@ import {
   determineDrift,
   applyDriftToCourse,
 } from "./pitchQualityService.js";
+import { PITCH_LOCATION_CONFIG } from "../config/pitchLocationConfig.js";
+import {
+  classifyPitchLocation,
+  createLegacyCompatibleActualPoint,
+} from "./pitchLocationService.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -129,6 +134,36 @@ function resolveCountState(balls, strikes) {
   return "neutral";
 }
 
+function assertLegacyLocationCompatibility({
+  provisionalIsStrike,
+  legacyZoneRow,
+  legacyZoneCol,
+  pitchLocation,
+}) {
+  const zoneMatches = provisionalIsStrike === pitchLocation.actualIsZone;
+  const cellMatches =
+    legacyZoneRow === pitchLocation.zoneRow &&
+    legacyZoneCol === pitchLocation.zoneCol;
+
+  if (zoneMatches && cellMatches) return;
+
+  const error = new Error(
+    "Legacy grid and actual pitch location classifications do not match."
+  );
+  error.name = "PitchLocationCompatibilityError";
+  error.code =
+    PITCH_LOCATION_CONFIG.legacyGridCompatibility.invariantErrorCode;
+  error.context = {
+    provisionalIsStrike,
+    actualIsZone: pitchLocation.actualIsZone,
+    legacyZoneRow,
+    legacyZoneCol,
+    derivedZoneRow: pitchLocation.zoneRow,
+    derivedZoneCol: pitchLocation.zoneCol,
+  };
+  throw error;
+}
+
 export function buildPitchExecutionContext({
   batter,
   pitcher,
@@ -138,7 +173,6 @@ export function buildPitchExecutionContext({
   chooseCourse,
   calcPitchOutcomeProbabilities,
   chooseZoneSpot,
-  shouldPatchLastPitch,
 }) {
   const pitchType = choosePitchType(pitcher, random);
   const pitchVelocity = getPitchVelocity(pitcher, pitchType);
@@ -165,8 +199,27 @@ export function buildPitchExecutionContext({
     strikes
   );
 
-  const isStrike = random() < probs.strikeRate;
-  const [resolvedZoneRow, resolvedZoneCol] = chooseZoneSpot(course, isStrike, random);
+  const provisionalIsStrike = random() < probs.strikeRate;
+  const [legacyZoneRow, legacyZoneCol] = chooseZoneSpot(
+    course,
+    provisionalIsStrike,
+    random
+  );
+  const actualPoint = createLegacyCompatibleActualPoint(
+    legacyZoneRow,
+    legacyZoneCol
+  );
+  const pitchLocation = classifyPitchLocation(actualPoint);
+  assertLegacyLocationCompatibility({
+    provisionalIsStrike,
+    legacyZoneRow,
+    legacyZoneCol,
+    pitchLocation,
+  });
+
+  const isStrike = pitchLocation.actualIsZone;
+  const resolvedZoneRow = pitchLocation.zoneRow;
+  const resolvedZoneCol = pitchLocation.zoneCol;
 
   const strikeInfo = isStrike
     ? classifyStrikeType(
@@ -200,9 +253,6 @@ export function buildPitchExecutionContext({
   const swingRate = isStrike ? probs.zSwingRate : effectiveOSwingRate;
   const swung = random() < swingRate;
 
-  const zoneRow = shouldPatchLastPitch ? resolvedZoneRow : null;
-  const zoneCol = shouldPatchLastPitch ? resolvedZoneCol : null;
-
   return {
     pitchType,
     pitchVelocity,
@@ -221,8 +271,9 @@ export function buildPitchExecutionContext({
     },
     isStrike,
     swung,
-    zoneRow,
-    zoneCol,
+    ...pitchLocation,
+    locationModel:
+      PITCH_LOCATION_CONFIG.legacyGridCompatibility.locationModel,
 
     strikeType: strikeInfo.strikeType,
     strikeTypeLabel: strikeInfo.strikeTypeLabel,

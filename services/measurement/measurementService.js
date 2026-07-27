@@ -2,6 +2,7 @@ import {
   createFastSimulationOptions,
   simulateGameMutable,
 } from "../../engine/core/engineCore.js";
+import { PITCH_LOCATION_CONFIG } from "../../config/pitchLocationConfig.js";
 import { createInitialSimState } from "../../state/gameState.js";
 import { createSeededRandom, normalizeSeed } from "../seededRandomService.js";
 import {
@@ -59,6 +60,7 @@ const STRUCTURAL_ERROR_CODES = new Set([
   "EV_LA_LOOKUP_NOT_READY",
   "EV_LA_LOOKUP_INVALID",
   "EV_LA_LOOKUP_LOAD_FAILED",
+  PITCH_LOCATION_CONFIG.legacyGridCompatibility.invariantErrorCode,
 ]);
 const MAX_SIMULATION_ERRORS = 10;
 const MAX_CONSECUTIVE_FAILURES = 10;
