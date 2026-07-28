@@ -115,6 +115,15 @@ export function createFastSimulationOptions(runtime = {}) {
   if (typeof runtime.onPitchMeasurement === "function") {
     options.onPitchMeasurement = runtime.onPitchMeasurement;
   }
+  if (runtime.directionMode === "off" || runtime.directionMode === "shadow") {
+    options.directionMode = runtime.directionMode;
+  }
+  if (typeof runtime.directionRandom === "function") {
+    options.directionRandom = runtime.directionRandom;
+  }
+  if (typeof runtime.gameKey === "string" && runtime.gameKey.length > 0) {
+    options.gameKey = runtime.gameKey;
+  }
 
   return options;
 }
@@ -124,6 +133,16 @@ export function stepPitchMutable(state, rawOptions = {}) {
   const random =
     typeof options.random === "function" ? options.random : Math.random;
   if (state.isComplete) return state;
+  if (state.pitchSequence === undefined) {
+    state.pitchSequence = 0;
+  }
+  if (!Number.isInteger(state.pitchSequence) || state.pitchSequence < 0) {
+    const error = new Error("Pitch sequence must be a nonnegative integer.");
+    error.code = "PITCH_SEQUENCE_INVALID";
+    error.context = { pitchSequence: state.pitchSequence };
+    throw error;
+  }
+  state.pitchSequence += 1;
 
   beginPlateAppearanceIfNeeded(state, {
     pickBatter,
@@ -306,12 +325,15 @@ export function stepPitchMutable(state, rawOptions = {}) {
   const pitchResolution = resolvePlateAppearanceResult({
     state,
     batter,
+    pitcher,
     side,
     pitchType,
     course,
     probs,
     isStrike,
     swung,
+    normalizedX,
+    normalizedZ,
     strikeType,
     strikeTypeLabel,
     strikeJudgeDifficulty,

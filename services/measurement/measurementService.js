@@ -3,8 +3,13 @@ import {
   simulateGameMutable,
 } from "../../engine/core/engineCore.js";
 import { PITCH_LOCATION_CONFIG } from "../../config/pitchLocationConfig.js";
+import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
 import { createInitialSimState } from "../../state/gameState.js";
-import { createSeededRandom, normalizeSeed } from "../seededRandomService.js";
+import {
+  createSeededRandom,
+  deriveNamespacedSeed,
+  normalizeSeed,
+} from "../seededRandomService.js";
 import {
   commitAdvancedMeasurementGame,
   createAdvancedMeasurementAccumulator,
@@ -17,10 +22,16 @@ import {
   buildMeasurementReferenceComparison,
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
+import {
+  createDirectionMeasurementAccumulator,
+  finalizeDirectionMeasurement,
+  mergeDirectionMeasurement,
+  recordDirectionMeasurement,
+} from "./measurementDirectionService.js";
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
-export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 3;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 4;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -58,6 +69,8 @@ const OUTCOME_KEYS = Object.freeze([
 const STRUCTURAL_ERROR_CODES = new Set([
   "BATTED_BALL_MISSING",
   "BATTED_BALL_OUTCOME_INVALID",
+  "BATTED_BALL_DIRECTION_RANDOM_MISSING",
+  "BATTED_BALL_DIRECTION_RANDOM_SHARED",
   "EV_LA_LOOKUP_NOT_READY",
   "EV_LA_LOOKUP_INVALID",
   "EV_LA_LOOKUP_LOAD_FAILED",
@@ -150,10 +163,11 @@ export function createEmptyMeasurementAccumulator() {
     diagnostics: createDiagnostics(),
     simulationErrors: [],
     advanced: createAdvancedMeasurementAccumulator(),
+    direction: createDirectionMeasurementAccumulator(),
   };
 }
 
-export function createGameMeasurementAccumulator() {
+export function createGameMeasurementAccumulator(directionMode = "shadow") {
   return {
     qoc: {
       away: zeroMap(QOC_KEYS),
@@ -162,6 +176,10 @@ export function createGameMeasurementAccumulator() {
     battedBallMetrics: createBattedBallTotals(),
     diagnostics: createDiagnostics(),
     advanced: createAdvancedMeasurementAccumulator(),
+    direction:
+      directionMode === BATTED_BALL_DIRECTION_CONFIG.defaultMode
+        ? null
+        : createDirectionMeasurementAccumulator(),
   };
 }
 
@@ -278,6 +296,9 @@ export function recordBattedBallMeasurement(gameAccumulator, event) {
     gameAccumulator.qoc[side][event.qoc] += 1;
   }
 
+  if (gameAccumulator.direction) {
+    recordDirectionMeasurement(gameAccumulator.direction, event);
+  }
   recordAdvancedBattedBallMeasurement(gameAccumulator.advanced, event);
 
   return true;
@@ -394,6 +415,12 @@ export function commitCompletedMeasurementGame(
     gameAccumulator.advanced,
     gameState
   );
+  if (gameAccumulator.direction) {
+    mergeDirectionMeasurement(
+      accumulator.direction,
+      gameAccumulator.direction
+    );
+  }
 }
 
 function safeDivide(numerator, denominator) {
@@ -572,12 +599,21 @@ export function finalizeMeasurementSummary(accumulator, run) {
     battingProfiles: advanced.battingProfiles,
     contactDisposition,
   });
+  const directionMode =
+    run.directionMode || BATTED_BALL_DIRECTION_CONFIG.defaultMode;
+  const direction = finalizeDirectionMeasurement(accumulator.direction, {
+    fairBattedBalls,
+    mode: directionMode,
+    directionSeed: run.directionSeed ?? null,
+  });
 
   return {
     reportSchemaVersion: MEASUREMENT_SUMMARY_SCHEMA_VERSION,
     status: run.status,
     run: {
       seed: normalizeSeed(run.seed),
+      directionMode,
+      directionSeed: direction.directionSeed,
       requestedGames: run.requestedGames,
       completedGames: accumulator.completedGames,
       failedGames: accumulator.failedGames,
@@ -593,6 +629,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
     gameDistribution: advanced.gameDistribution,
     plateDiscipline: advanced.plateDiscipline,
     pitchLocation: advanced.pitchLocation,
+    direction,
     contactDisposition,
     referenceBenchmark,
     referenceComparison,
@@ -638,6 +675,30 @@ export async function runMeasurementBatches({
   const normalizedSeed = normalizeSeed(seed);
   const safeBatchSize = Math.max(1, Math.floor(Number(batchSize) || 1));
   const random = runtime.random || createSeededRandom(normalizedSeed);
+  const directionMode =
+    runtime.directionMode ?? BATTED_BALL_DIRECTION_CONFIG.shadowMode;
+  if (directionMode !== "off" && directionMode !== "shadow") {
+    const error = new Error("Measurement Direction mode is invalid.");
+    error.code = "BATTED_BALL_DIRECTION_INPUT_INVALID";
+    error.context = { directionMode };
+    throw error;
+  }
+  const directionSeed = normalizeSeed(
+    runtime.directionSeed ??
+      deriveNamespacedSeed(normalizedSeed, BATTED_BALL_DIRECTION_CONFIG.model)
+  );
+  const directionRandom =
+    directionMode === BATTED_BALL_DIRECTION_CONFIG.shadowMode
+      ? runtime.directionRandom || createSeededRandom(directionSeed)
+      : undefined;
+  if (directionMode === "shadow" && directionRandom === random) {
+    const error = new Error(
+      "Direction Shadow random must be independent from the main random."
+    );
+    error.code = "BATTED_BALL_DIRECTION_RANDOM_SHARED";
+    error.context = { directionMode };
+    throw error;
+  }
   const createGameState =
     runtime.createGameState ||
     ((away, home) =>
@@ -659,12 +720,15 @@ export async function runMeasurementBatches({
 
     while (accumulator.completedGames + accumulator.failedGames < batchEnd) {
       const gameIndex = accumulator.completedGames + accumulator.failedGames + 1;
-      const gameAccumulator = createGameMeasurementAccumulator();
+      const gameAccumulator = createGameMeasurementAccumulator(directionMode);
 
       try {
         const state = createGameState(awayTeam, homeTeam);
         const options = createFastSimulationOptions({
           random,
+          directionMode,
+          directionRandom,
+          gameKey: `seed:${normalizedSeed}:game:${gameIndex}`,
           onPitchMeasurement: (event) =>
             recordPitchMeasurementEvent(gameAccumulator, event),
           onBattedBallMeasurement: (event) =>
@@ -681,6 +745,8 @@ export async function runMeasurementBatches({
           error.measurementSummary = finalizeMeasurementSummary(accumulator, {
             status: "error",
             seed: normalizedSeed,
+            directionMode,
+            directionSeed,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -695,6 +761,8 @@ export async function runMeasurementBatches({
           abortError.measurementSummary = finalizeMeasurementSummary(accumulator, {
             status: "error",
             seed: normalizedSeed,
+            directionMode,
+            directionSeed,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -722,6 +790,8 @@ export async function runMeasurementBatches({
   return finalizeMeasurementSummary(accumulator, {
     status,
     seed: normalizedSeed,
+    directionMode,
+    directionSeed,
     requestedGames,
     elapsedMs: now() - startedAt,
   });

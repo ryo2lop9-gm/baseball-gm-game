@@ -9,6 +9,7 @@ import {
   mergeMeasurementHistogram,
   recordMeasurementHistogram,
 } from "./measurementHistogramService.js";
+import { getMeasurementClass } from "./measurementClassService.js";
 
 export const MEASUREMENT_COUNT_KEYS = Object.freeze([
   "0-0", "1-0", "2-0", "3-0",
@@ -413,13 +414,6 @@ function getLaBand(value) {
   return "50+";
 }
 
-function getBattedBallType(launchAngle) {
-  if (launchAngle < 10) return "GB";
-  if (launchAngle < 25) return "LD";
-  if (launchAngle < 50) return "FB";
-  return "PU";
-}
-
 function recordTerminalResult(line, event) {
   const result = event.paResult;
   if (!result) return;
@@ -526,7 +520,7 @@ function recordBattedProfile(profile, event) {
   recordBattedLine(profile, event);
   const exitVelocity = Number(event.exitVelocity);
   const launchAngle = Number(event.launchAngle);
-  profile[getBattedBallType(launchAngle)] += 1;
+  profile[getMeasurementClass(launchAngle)] += 1;
   if (exitVelocity >= 95) profile.hardHit += 1;
   if (launchAngle >= 8 && launchAngle <= 32) profile.sweetSpot += 1;
   recordMeasurementHistogram(profile.exitVelocityHistogram, exitVelocity);

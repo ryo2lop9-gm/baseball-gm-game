@@ -1,3 +1,8 @@
+import {
+  createBatterProfile,
+  createPitcherProfile,
+} from "../../models/playerModels.js";
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -18,10 +23,16 @@ function createEmptyPlayerStats() {
 }
 
 export function ensurePlayerProfile(player) {
-  const profile = clone(player?.profile || {});
+  const name = player?.name || player?.profile?.name || "Unknown Player";
+  const type = player?.type || player?.profile?.type || "batter";
+  const source = clone(player?.profile || {});
+  const profile =
+    type === "pitcher"
+      ? createPitcherProfile(name, source)
+      : createBatterProfile(name, source);
   profile.id = profile.id || player?.id || crypto.randomUUID();
-  profile.name = profile.name || player?.name || "Unknown Player";
-  profile.type = profile.type || player?.type || "batter";
+  profile.name = profile.name || name;
+  profile.type = profile.type || type;
   return profile;
 }
 

@@ -6,6 +6,11 @@ import {
   NEUTRAL_DEFENSE_RATING,
   isPlayerDefensePosition,
 } from "../config/defenseConfig.js";
+import {
+  BATTER_BATS_VALUES,
+  BATTER_DIRECTION_TYPES,
+  PITCHER_THROWS_VALUES,
+} from "../config/battedBallDirectionConfig.js";
 
 function createEmptyBatterStatLine() {
   return {
@@ -31,12 +36,48 @@ function createBaseProfile(name, type, extra = {}) {
   };
 }
 
+function assertIdentityMetadataValue(field, value, allowedValues) {
+  if (allowedValues.includes(value)) return value;
+  const error = new Error(`Player identity ${field} is invalid.`);
+  error.code = "PLAYER_IDENTITY_METADATA_INVALID";
+  error.context = {
+    field,
+    value,
+    allowedValues: [...allowedValues],
+  };
+  throw error;
+}
+
 export function createBatterProfile(name, extra = {}) {
-  return createBaseProfile(name, "batter", extra);
+  const source = extra || {};
+  const bats = assertIdentityMetadataValue(
+    "bats",
+    source.bats === undefined ? "R" : source.bats,
+    BATTER_BATS_VALUES
+  );
+  const directionType = assertIdentityMetadataValue(
+    "directionType",
+    source.directionType === undefined ? "balanced" : source.directionType,
+    BATTER_DIRECTION_TYPES
+  );
+  return createBaseProfile(name, "batter", {
+    ...source,
+    bats,
+    directionType,
+  });
 }
 
 export function createPitcherProfile(name, extra = {}) {
-  return createBaseProfile(name, "pitcher", extra);
+  const source = extra || {};
+  const throws = assertIdentityMetadataValue(
+    "throws",
+    source.throws === undefined ? "R" : source.throws,
+    PITCHER_THROWS_VALUES
+  );
+  return createBaseProfile(name, "pitcher", {
+    ...source,
+    throws,
+  });
 }
 
 export function createEmptyBatterGameStats() {
@@ -253,7 +294,7 @@ export function createSeasonBatterSnapshot(player) {
   return {
     id: player.profile?.id || crypto.randomUUID(),
     name: player.name,
-    profile: player.profile ? { ...player.profile } : createBatterProfile(player.name),
+    profile: createBatterProfile(player.name, player.profile || {}),
     ratings: { ...player.ratings },
     defense: createPlayerDefense(player.defense),
     seasonStats: createEmptyBatterSeasonStats(),

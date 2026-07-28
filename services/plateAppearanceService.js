@@ -1,4 +1,5 @@
 import { generateFairBattedBall } from "./evLaContactService.js";
+import { generateDirectionShadow } from "./battedBallDirectionService.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 function clamp(value, min, max) {
@@ -135,12 +136,15 @@ function recordVelocityResult(state, side, pitchVelocity, result) {
 export function resolvePlateAppearanceResult({
   state,
   batter,
+  pitcher,
   side,
   pitchType,
   course,
   probs,
   isStrike,
   swung,
+  normalizedX,
+  normalizedZ,
   strikeType,
   strikeTypeLabel,
   strikeJudgeDifficulty,
@@ -468,6 +472,42 @@ export function resolvePlateAppearanceResult({
     qoc: battedBall.qoc,
   });
 
+  if (
+    options?.directionMode === "shadow" &&
+    options?.directionRandom === random
+  ) {
+    const error = new Error(
+      "Direction Shadow random must be independent from the main random."
+    );
+    error.code = "BATTED_BALL_DIRECTION_RANDOM_SHARED";
+    error.context = { directionMode: options.directionMode };
+    throw error;
+  }
+  const directionShadow =
+    options?.directionMode === "shadow"
+      ? generateDirectionShadow({
+          mode: options.directionMode,
+          batter,
+          pitcher,
+          pitchType,
+          launchAngle: battedBall.launchAngle,
+          normalizedX,
+          normalizedZ,
+          directionRandom: options.directionRandom,
+        })
+      : null;
+  const gameKey =
+    typeof options?.gameKey === "string" && options.gameKey.length > 0
+      ? options.gameKey
+      : "game";
+  const battedBallWithDirection = {
+    ...battedBall,
+    battedBallEventId: Number.isInteger(state?.pitchSequence)
+      ? `${gameKey}:pitch:${state.pitchSequence}`
+      : null,
+    directionShadow,
+  };
+
   const contactResult = resolveBattedBallResult(
     state,
     batter,
@@ -475,7 +515,7 @@ export function resolvePlateAppearanceResult({
     pitchType,
     battedBall.qoc,
     options,
-    battedBall
+    battedBallWithDirection
   );
 
   return {

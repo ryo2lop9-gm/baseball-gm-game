@@ -198,7 +198,7 @@ test("advanced aggregate groups and entity totals reconcile", async () => {
   const pitches = summary.plateDiscipline.combined.pitches;
 
   assert.equal(summary.status, "completed");
-  assert.equal(summary.reportSchemaVersion, 3);
+  assert.equal(summary.reportSchemaVersion, 4);
   assert.ok(pitches > 0);
   assert.equal(sumGroup(summary.breakdowns.count, "pitches"), pitches);
   assert.equal(sumGroup(summary.breakdowns.pitchType, "pitches"), pitches);
@@ -257,7 +257,7 @@ test("advanced aggregate groups and entity totals reconcile", async () => {
   }
 });
 
-test("schema v3 report carries diagnostics, definitions, and explicit limitations", async () => {
+test("schema v4 report carries diagnostics, definitions, and explicit limitations", async () => {
   const teams = createMlbAverageValidationTeams();
   const summary = await runMeasurementBatches({
     awayTeam: teams.away,
@@ -274,7 +274,7 @@ test("schema v3 report carries diagnostics, definitions, and explicit limitation
   const json = buildMeasurementJson(options);
   const markdown = buildMeasurementMarkdown(options);
 
-  assert.equal(report.reportSchemaVersion, 3);
+  assert.equal(report.reportSchemaVersion, 4);
   for (const key of [
     "definitions",
     "modelLimitations",
@@ -294,9 +294,9 @@ test("schema v3 report carries diagnostics, definitions, and explicit limitation
   assert.match(report.definitions.zoneClassification, /separate concepts/);
   assert.equal(report.definitions.battedBallClasses.AIR, "LD + FB + PU");
   assert.equal(Object.hasOwn(report.breakdowns, "direction"), false);
-  assert.ok(report.modelLimitations.unavailableMetrics.some(
-    (item) => item.metric.includes("Direction")
-  ));
+  assert.ok(Object.hasOwn(report, "direction"));
+  assert.match(report.definitions.directionShadow.authority, /informational/i);
+  assert.match(markdown, /Direction Shadow/);
   assert.match(markdown, /Plate Discipline/);
   assert.match(markdown, /Pitches\/PA/);
   assert.match(markdown, /Result Strike%/);
@@ -326,7 +326,7 @@ test("schema v3 report carries diagnostics, definitions, and explicit limitation
     }
   }
   assert.doesNotMatch(json, /NaN|Infinity|undefined/);
-  assert.equal(JSON.parse(json).reportSchemaVersion, 3);
+  assert.equal(JSON.parse(json).reportSchemaVersion, 4);
 });
 
 test("measurement HTML ids are unique and quality breakdown rendering stays wired", async () => {

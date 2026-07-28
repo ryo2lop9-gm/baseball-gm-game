@@ -75,6 +75,8 @@ export function createInitialRuntimeState(awayTeam, homeTeam) {
       home: 0,
     },
 
+    pitchSequence: 0,
+
     activePitchers: {
       away: awayActivePitcher,
       home: homeActivePitcher,

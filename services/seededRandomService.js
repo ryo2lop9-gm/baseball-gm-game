@@ -17,3 +17,17 @@ export function createSeededRandom(seed = DEFAULT_MEASUREMENT_SEED) {
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+export function deriveNamespacedSeed(seed, namespace) {
+  let value = normalizeSeed(seed) ^ 0x811c9dc5;
+  for (const character of String(namespace)) {
+    value ^= character.charCodeAt(0);
+    value = Math.imul(value, 0x01000193) >>> 0;
+  }
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d) >>> 0;
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b) >>> 0;
+  value ^= value >>> 16;
+  return value >>> 0;
+}

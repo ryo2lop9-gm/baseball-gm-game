@@ -86,6 +86,7 @@ export function applySelectedBattedBallOutcome({
     sampleQuality,
     evLaKey
   );
+  const directionShadow = battedBall?.directionShadow;
 
   // QoC remains an analysis/logging label and never selects the outcome.
   addQoCToBox(state, qoc);
@@ -128,6 +129,22 @@ export function applySelectedBattedBallOutcome({
       exitVelocity: battedBall.exitVelocity,
       launchAngle: battedBall.launchAngle,
       qoc,
+      battedBallEventId: battedBall?.battedBallEventId ?? null,
+      directionMode: directionShadow?.mode || "off",
+      directionModel: directionShadow?.model ?? null,
+      batterBats: directionShadow?.batterBats ?? null,
+      pitcherThrows: directionShadow?.pitcherThrows ?? null,
+      resolvedBattingSide: directionShadow?.resolvedBattingSide ?? null,
+      directionType: directionShadow?.directionType ?? null,
+      measurementClass: directionShadow?.measurementClass ?? null,
+      direction: directionShadow?.direction ?? null,
+      fieldSector: directionShadow?.fieldSector ?? null,
+      batterRelativeSprayAngle:
+        directionShadow?.batterRelativeSprayAngle ?? null,
+      sprayAngle: directionShadow?.sprayAngle ?? null,
+      horizontalLocation: directionShadow?.horizontalLocation ?? null,
+      verticalLocation: directionShadow?.verticalLocation ?? null,
+      directionRngCalls: directionShadow?.directionRngCalls ?? 0,
       evLaKey,
       source,
       sampleQuality,

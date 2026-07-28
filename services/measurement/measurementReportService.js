@@ -1,10 +1,11 @@
 import { SMOOTHING_CONFIG } from "../evLaOutcomeService.js";
+import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
 import {
   buildMeasurementReferenceComparison,
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
 
-export const MEASUREMENT_REPORT_SCHEMA_VERSION = 3;
+export const MEASUREMENT_REPORT_SCHEMA_VERSION = 4;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
@@ -235,6 +236,23 @@ export function getMeasurementDefinitions() {
       hardHit: "exit velocity >= 95 mph",
       sweetSpot: "8 <= launch angle <= 32 degrees",
     },
+    directionShadow: {
+      sprayAngle:
+        "sprayAngle is batted-ball field direction: -45 degrees is the left-field/third-base line, 0 is center, and +45 is the right-field/first-base line.",
+      statcastDistinction:
+        "This batted-ball sprayAngle is distinct from Statcast Attack Direction, which describes bat-path direction.",
+      model:
+        "gm_basic_direction_shadow_v1 is a provisional Shadow model with a uniform continuous angle inside the selected sector.",
+      authority:
+        "Direction Shadow is informational only and is not connected to outcomes or defense.",
+      missingPhysics:
+        "Timing and a physical intercept/contact point are not implemented.",
+      pitchLocationInputs:
+        "normalizedX and normalizedZ are the pitch-location inputs; course and locationCourse are not Direction inputs.",
+      csvDocsUrl: "https://baseballsavant.mlb.com/csv-docs",
+      statcastGlossaryUrl:
+        "https://www.mlb.com/glossary/statcast/attack-direction",
+    },
     evBands: "<70; 70-79.9; 80-89.9; 90-94.9; 95-99.9; 100-104.9; 105+ (lower bound inclusive except the first band)",
     laBands: "<-10; -10 to <0; 0 to <10; 10 to <25; 25 to <50; 50+ (lower bound inclusive except the first band)",
     percentileMethod:
@@ -247,10 +265,6 @@ export function getMeasurementDefinitions() {
 export function getMeasurementModelLimitations() {
   return {
     unavailableMetrics: [
-      {
-        metric: "Direction / spray angle",
-        reason: "Direction is not implemented in the current batted-ball model.",
-      },
       {
         metric: "Timing and jammed contact",
         reason: "No stable event fields exist yet for timing or jammed contact.",
@@ -269,7 +283,7 @@ export function getMeasurementModelLimitations() {
       },
       {
         metric: "Defensive OAA and fielding breakdowns",
-        reason: "Direction, landing point, hang time, and fielder events are not implemented.",
+        reason: "Direction Shadow does not provide landing point, hang time, or fielder events.",
       },
       {
         metric: "ERA, ER, FIP and pitcher decisions",
@@ -324,6 +338,7 @@ export function buildMeasurementReportObject({
     gameDistribution: summary?.gameDistribution || {},
     plateDiscipline: summary?.plateDiscipline || {},
     pitchLocation: summary?.pitchLocation || {},
+    direction: summary?.direction || {},
     batting: results,
     pitching: buildPitchingSummary(pitchers),
     players: summary?.players || { away: [], home: [] },
@@ -422,6 +437,86 @@ function distributionTable(title, distribution) {
     ...Object.entries(distribution || {}).map(
       ([key, value]) => `| ${mdCell(key)} | ${value.count || 0} | ${formatPct(value.pct)} |`
     ),
+  ];
+}
+
+function directionBreakdownTable(title, breakdown) {
+  return [
+    `### ${title}`,
+    "",
+    "| Group | Opportunities | Pull | Pull% | Center | Center% | Oppo | Oppo% |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(breakdown || {}).map(([key, value]) =>
+      `| ${mdCell(key)} | ${value.opportunities || 0} | ${value.direction?.pull?.count || 0} | ${formatPct(value.direction?.pull?.pct)} | ${value.direction?.center?.count || 0} | ${formatPct(value.direction?.center?.pct)} | ${value.direction?.oppo?.count || 0} | ${formatPct(value.direction?.oppo?.pct)} |`
+    ),
+  ];
+}
+
+function directionShadowLines(direction, definitions) {
+  const angle = direction?.sprayAngle || {};
+  const diagnostics = direction?.diagnostics || {};
+  const definition = definitions?.directionShadow || {};
+  return [
+    "## Direction Shadow",
+    "",
+    `- mode: ${mdCell(direction?.mode)}`,
+    `- model: ${mdCell(direction?.model)}`,
+    `- directionSeed: ${mdCell(direction?.directionSeed)}`,
+    `- opportunities: ${formatNumber(direction?.opportunities)}`,
+    `- validEvents: ${formatNumber(direction?.validEvents)}`,
+    `- invalidEvents: ${formatNumber(direction?.invalidEvents)}`,
+    `- directionRngCalls: ${formatNumber(diagnostics.directionRngCalls)}`,
+    `- categoryAngleMismatchCount: ${formatNumber(diagnostics.categoryAngleMismatchCount)}`,
+    `- opportunityFairBattedBallMismatchCount: ${formatNumber(diagnostics.opportunityFairBattedBallMismatchCount)}`,
+    "",
+    "| Direction | count | pct |",
+    "| --- | ---: | ---: |",
+    ...Object.entries(direction?.direction || {}).map(
+      ([key, value]) =>
+        `| ${mdCell(key)} | ${value.count || 0} | ${formatPct(value.pct)} |`
+    ),
+    "",
+    "| Field Sector | count | pct |",
+    "| --- | ---: | ---: |",
+    ...Object.entries(direction?.fieldSector || {}).map(
+      ([key, value]) =>
+        `| ${mdCell(key)} | ${value.count || 0} | ${formatPct(value.pct)} |`
+    ),
+    "",
+    "| Spray Angle | Mean | Min | P10 | P25 | P50 | P75 | P90 | Max |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    `| degrees | ${formatNumber(angle.average, 2)} | ${formatNumber(angle.min, 2)} | ${formatNumber(angle.p10, 2)} | ${formatNumber(angle.p25, 2)} | ${formatNumber(angle.p50, 2)} | ${formatNumber(angle.p75, 2)} | ${formatNumber(angle.p90, 2)} | ${formatNumber(angle.max, 2)} |`,
+    "",
+    ...directionBreakdownTable(
+      "Resolved Batting Side",
+      direction?.breakdowns?.resolvedBattingSide
+    ),
+    "",
+    ...directionBreakdownTable(
+      "Measurement Class",
+      direction?.breakdowns?.measurementClass
+    ),
+    "",
+    ...directionBreakdownTable(
+      "Pitch Type",
+      direction?.breakdowns?.pitchType
+    ),
+    "",
+    ...directionBreakdownTable(
+      "Horizontal Location",
+      direction?.breakdowns?.horizontalLocation
+    ),
+    "",
+    "### Direction Shadow Definitions and Limitations",
+    "",
+    `- sprayAngle: ${mdCell(definition.sprayAngle)}`,
+    `- Statcast Attack Direction: ${mdCell(definition.statcastDistinction)}`,
+    `- Shadow model: ${mdCell(definition.model)}`,
+    `- Outcome / defense authority: ${mdCell(definition.authority)}`,
+    `- Missing timing / intercept point: ${mdCell(definition.missingPhysics)}`,
+    `- Pitch-location inputs: ${mdCell(definition.pitchLocationInputs)}`,
+    `- Baseball Savant CSV docs: ${mdCell(definition.csvDocsUrl)}`,
+    `- Statcast Attack Direction glossary: ${mdCell(definition.statcastGlossaryUrl)}`,
   ];
 }
 
@@ -774,7 +869,7 @@ export function buildMeasurementMarkdown(options) {
     plateDiscipline, battedBallProfiles, breakdowns, smoothingDiagnostics,
     players, pitchers, gameDistribution, definitions, modelLimitations,
     validationPreset, validationPresetLabel, referenceBenchmark,
-    referenceComparison, contactDisposition, pitchLocation,
+    referenceComparison, contactDisposition, pitchLocation, direction,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -877,6 +972,8 @@ export function buildMeasurementMarkdown(options) {
       breakdowns.locationModel
     ),
     "",
+    ...directionShadowLines(direction, definitions),
+    "",
     "## EV/LA Batted Ball Profile",
     "",
     ...battedProfileTable(battedBallProfiles),
@@ -974,6 +1071,10 @@ export function buildMeasurementMarkdown(options) {
     `- Chase% vs Chase Region%: ${definitions.pitchLocation.chaseVsChaseRegion}`,
     `- course vs locationCourse: ${definitions.pitchLocation.courseVsLocationCourse}`,
     `- legacy_grid_compat: ${definitions.pitchLocation.legacyGridCompatibility}`,
+    `- Direction sprayAngle: ${definitions.directionShadow.sprayAngle}`,
+    `- Direction vs Statcast Attack Direction: ${definitions.directionShadow.statcastDistinction}`,
+    `- Direction authority: ${definitions.directionShadow.authority}`,
+    `- Direction pitch-location inputs: ${definitions.directionShadow.pitchLocationInputs}`,
     `- AIR: ${definitions.battedBallClasses.AIR}`,
     "",
     "## AIへの確認依頼 / AI Review Request",

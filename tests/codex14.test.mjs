@@ -80,8 +80,12 @@ function normalizeStateForCompatibility(state) {
     if (!value || typeof value !== "object") return;
     delete value.defense;
     delete value.defensiveAlignment;
+    delete value.pitchSequence;
     if (value.profile && typeof value.profile === "object") {
       value.profile.id = "<profile-id>";
+      delete value.profile.bats;
+      delete value.profile.throws;
+      delete value.profile.directionType;
     }
     for (const child of Object.values(value)) visit(child);
   };
@@ -91,8 +95,12 @@ function normalizeStateForCompatibility(state) {
 
 function normalizeSummaryForCompatibility(summary) {
   const normalized = structuredClone(summary);
+  normalized.reportSchemaVersion = 3;
   normalized.run.elapsedMs = 0;
   normalized.run.gamesPerSecond = 0;
+  delete normalized.run.directionMode;
+  delete normalized.run.directionSeed;
+  delete normalized.direction;
   for (const side of ["away", "home"]) {
     for (const player of normalized.players?.[side] || []) {
       player.key = "<player-key>";
@@ -690,14 +698,14 @@ test("Pitch Location aggregation, all 25 cells, and diagnostics do not regress",
   );
 });
 
-test("Summary and Report schema versions remain three", () => {
+test("Summary and Report schema versions are four", () => {
   const report = buildMeasurementReportObject({
     summary: measurementSummary,
     teams: compatibilityTeams,
     generatedAt: "2026-07-28T00:00:00.000Z",
   });
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 3);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 3);
-  assert.equal(measurementSummary.reportSchemaVersion, 3);
-  assert.equal(report.reportSchemaVersion, 3);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 4);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 4);
+  assert.equal(measurementSummary.reportSchemaVersion, 4);
+  assert.equal(report.reportSchemaVersion, 4);
 });

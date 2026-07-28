@@ -6,6 +6,10 @@
  * - bullpen
  * - roster から試合用 team を安全に再構成する
  */
+import {
+  createBatterProfile,
+  createPitcherProfile,
+} from "../../models/playerModels.js";
 
 function clone(value) {
   return structuredClone(value);
@@ -52,7 +56,7 @@ function ensureRosterBatter(player) {
   const next = clonePlayer(player || {});
   next.name = next.name || "Unknown Batter";
   next.type = "batter";
-  next.profile = clone(next.profile || {});
+  next.profile = createBatterProfile(next.name, clone(next.profile || {}));
   next.profile.id = next.profile.id || next.id || crypto.randomUUID();
   next.profile.name = next.profile.name || next.name;
   next.profile.type = "batter";
@@ -66,7 +70,7 @@ function ensureRosterPitcher(player) {
   const next = clonePlayer(player || {});
   next.name = next.name || "Unknown Pitcher";
   next.type = "pitcher";
-  next.profile = clone(next.profile || {});
+  next.profile = createPitcherProfile(next.name, clone(next.profile || {}));
   next.profile.id = next.profile.id || next.id || crypto.randomUUID();
   next.profile.name = next.profile.name || next.name;
   next.profile.type = "pitcher";
