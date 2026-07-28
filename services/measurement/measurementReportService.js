@@ -1,12 +1,13 @@
 import { SMOOTHING_CONFIG } from "../evLaOutcomeService.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
+import { BATTED_BALL_DEFENSE_CONFIG } from "../../config/defenseProbabilityConfig.js";
 import { RESOLUTION_AUTHORITY_CONFIG } from "../../config/resolutionAuthorityConfig.js";
 import {
   buildMeasurementReferenceComparison,
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
 
-export const MEASUREMENT_REPORT_SCHEMA_VERSION = 5;
+export const MEASUREMENT_REPORT_SCHEMA_VERSION = 6;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
@@ -245,7 +246,7 @@ export function getMeasurementDefinitions() {
       model:
         "gm_basic_direction_shadow_v1 is a provisional Shadow model with a uniform continuous angle inside the selected sector.",
       authority:
-        "Direction Shadow is informational only and is not connected to outcomes or defense.",
+        "Direction Shadow is informational and feeds diagnostic Geometry and Defense Shadow but is not connected to legacy outcomes or authoritative defense.",
       missingPhysics:
         "Timing and a physical intercept/contact point are not implemented.",
       pitchLocationInputs:
@@ -266,14 +267,36 @@ export function getMeasurementDefinitions() {
       missingPhysics:
         "Park walls, wind, spin, and rigorous three-dimensional aerodynamics are not implemented.",
       unavailableDefense:
-        "Catch probability, Responsible Fielder, and OAA are not implemented.",
+        "Geometry alone does not select a Responsible Fielder or produce a catch result; the separate Defense Shadow consumes eligible Geometry events.",
       authority:
-        "Geometry Shadow is informational only and is not connected to outcomes or defense.",
+        "Geometry Shadow feeds diagnostic Defense Shadow but is not connected to legacy outcomes or authoritative defense.",
       excludedInputs:
         "selectedOutcome, QoC, course, and locationCourse are not Geometry inputs.",
       csvDocsUrl: "https://baseballsavant.mlb.com/csv-docs",
       catchProbabilityUrl:
         "https://www.mlb.com/glossary/statcast/catch-probability",
+    },
+    defenseShadow: {
+      eligibility:
+        "Simple Catch Defense Shadow is limited to Geometry fly and popup events; ground, low_liner, and air_liner defense is not implemented.",
+      model:
+        "provisional_simple_catch_shadow_v1 is a provisional game Shadow model, not official or calibrated Statcast Catch Probability / Outs Above Average.",
+      commonClock:
+        "The model uses batted-ball contact as t = 0, which differs from MLB Catch Probability Opportunity Time.",
+      responsibleFielder:
+        "Responsible Fielder is selected from all nine positions by maximum average-ability catch probability; actual FLD and SPD apply only after selection.",
+      alignment:
+        "Only standard_alignment_v1 exists in v1, so pStandardAlignmentOut equals pAlignedAverageOut and no shift comparison is available.",
+      authority:
+        "simCatchOAA and the Shadow catch result are diagnostic_only and never replace the legacy EV/LA selectedOutcome.",
+      excludedInputs:
+        "selectedOutcome, legacy result, QoC, course, locationCourse, Attack Region, score, runners, outs, and inning are not catch-probability inputs.",
+      missingPhysics:
+        "Walls, liner en-route catches, ground defense, runners, throws, receivers, errors, and official scoring are not implemented.",
+      catchProbabilityUrl:
+        "https://www.mlb.com/glossary/statcast/catch-probability",
+      outsAboveAverageUrl:
+        "https://www.mlb.com/glossary/statcast/outs-above-average",
     },
     evBands: "<70; 70-79.9; 80-89.9; 90-94.9; 95-99.9; 100-104.9; 105+ (lower bound inclusive except the first band)",
     laBands: "<-10; -10 to <0; 0 to <10; 10 to <25; 25 to <50; 50+ (lower bound inclusive except the first band)",
@@ -305,7 +328,7 @@ export function getMeasurementModelLimitations() {
       },
       {
         metric: "Defensive OAA and fielding breakdowns",
-        reason: "Direction Shadow does not provide landing point, hang time, or fielder events.",
+        reason: "Only provisional diagnostic simple-catch simCatchOAA for fly and popup is available; official OAA and authoritative defense are not modeled.",
       },
       {
         metric: "ERA, ER, FIP and pitcher decisions",
@@ -362,6 +385,7 @@ export function buildMeasurementReportObject({
     pitchLocation: summary?.pitchLocation || {},
     direction: summary?.direction || {},
     geometry: summary?.geometry || {},
+    defense: summary?.defense || {},
     batting: results,
     pitching: buildPitchingSummary(pitchers),
     players: summary?.players || { away: [], home: [] },
@@ -634,6 +658,139 @@ function geometryShadowLines(geometry, definitions) {
     `- Excluded inputs: ${mdCell(definition.excludedInputs)}`,
     `- Baseball Savant CSV docs: ${mdCell(definition.csvDocsUrl)}`,
     `- Statcast Catch Probability glossary: ${mdCell(definition.catchProbabilityUrl)}`,
+  ];
+}
+
+function defenseOaaTable(title, breakdown) {
+  return [
+    `### ${title}`,
+    "",
+    "| Group | Evaluations | simCatchOAA Sum | simCatchOAA Average |",
+    "| --- | ---: | ---: | ---: |",
+    ...Object.entries(breakdown || {}).map(([key, value]) =>
+      `| ${mdCell(key)} | ${value.evaluations || 0} | ${formatNumber(value.simCatchOAASum, 3)} | ${formatNumber(value.simCatchOAAAverage, 4)} |`
+    ),
+  ];
+}
+
+function defenseShadowLines(defense, definitions, run) {
+  const diagnostics = defense?.diagnostics || {};
+  const definition = definitions?.defenseShadow || {};
+  const probabilities = defense?.probabilities || {};
+  return [
+    "## Simple Catch Defense Shadow",
+    "",
+    `- mode: ${mdCell(defense?.mode)}`,
+    `- model: ${mdCell(defense?.model || BATTED_BALL_DEFENSE_CONFIG.model)}`,
+    `- source: ${mdCell(defense?.source || BATTED_BALL_DEFENSE_CONFIG.source)}`,
+    `- defenseEventSchemaVersion: ${formatNumber(defense?.defenseEventSchemaVersion)}`,
+    `- shadowAuthority: ${mdCell(defense?.shadowAuthority)}`,
+    `- evaluations: ${formatNumber(defense?.evaluations)}`,
+    `- eligible: ${formatNumber(defense?.eligible)}`,
+    `- ineligible: ${formatNumber(defense?.ineligible)}`,
+    `- validEvents: ${formatNumber(defense?.validEvents)}`,
+    `- invalidEvents: ${formatNumber(defense?.invalidEvents)}`,
+    "",
+    ...distributionTable("Defense Exclusion Reasons", defense?.exclusions),
+    "",
+    ...distributionTable("Defense Trajectory Class", defense?.trajectoryClass),
+    "",
+    ...distributionTable(
+      "Responsible Fielder Position",
+      defense?.responsibleFielderPosition
+    ),
+    "",
+    ...distributionTable(
+      "Defense Movement Direction",
+      defense?.movementDirection
+    ),
+    "",
+    ...distributionTable("Defense Field Sector", defense?.fieldSector),
+    "",
+    "| Probability | count | mean | min | p10 | p25 | p50 | p75 | p90 | max |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...[
+      "pReachAverage",
+      "pSecureAverage",
+      "pReachActual",
+      "pSecureActual",
+      "pStandardAlignmentOut",
+      "pAlignedAverageOut",
+      "pActualOut",
+    ].map((key) => geometryHistogramLine(key, probabilities[key])),
+    "",
+    `- shadowCaught: ${formatNumber(defense?.shadowCaught)}`,
+    `- shadowCatchRate: ${formatPct(defense?.shadowCatchRate)}`,
+    `- expectedCatches: ${formatNumber(defense?.expectedCatches, 3)}`,
+    `- simCatchOAA sum: ${formatNumber(defense?.simCatchOAA?.sum, 3)}`,
+    `- simCatchOAA average: ${formatNumber(defense?.simCatchOAA?.average, 4)}`,
+    `- expectedSkillOuts sum: ${formatNumber(defense?.expectedSkillOutsSum, 3)}`,
+    `- executionResidual sum: ${formatNumber(defense?.executionResidualSum, 3)}`,
+    "",
+    ...distributionTable(
+      "Responsible Fielder FLD Band",
+      defense?.breakdowns?.fieldingBand
+    ),
+    "",
+    ...distributionTable(
+      "Responsible Fielder SPD Band",
+      defense?.breakdowns?.speedBand
+    ),
+    "",
+    ...defenseOaaTable(
+      "Position simCatchOAA",
+      defense?.breakdowns?.position
+    ),
+    "",
+    ...defenseOaaTable(
+      "Movement Direction simCatchOAA",
+      defense?.breakdowns?.movementDirection
+    ),
+    "",
+    ...defenseOaaTable(
+      "Difficulty simCatchOAA",
+      defense?.breakdowns?.difficulty
+    ),
+    "",
+    "### Legacy Outcome vs Shadow Catch",
+    "",
+    "| Legacy | Shadow caught | Shadow not caught |",
+    "| --- | ---: | ---: |",
+    `| out | ${formatNumber(defense?.legacyShadowMatrix?.out?.caught)} | ${formatNumber(defense?.legacyShadowMatrix?.out?.notCaught)} |`,
+    `| safe | ${formatNumber(defense?.legacyShadowMatrix?.safe?.caught)} | ${formatNumber(defense?.legacyShadowMatrix?.safe?.notCaught)} |`,
+    "",
+    "### Defense Diagnostics and Performance",
+    "",
+    `- elapsedMs: ${formatNumber(run?.elapsedMs, 2)}`,
+    `- gamesPerSecond: ${formatNumber(run?.gamesPerSecond, 2)}`,
+    `- defenseRngCalls: ${formatNumber(diagnostics.defenseRngCalls)}`,
+    `- fallbackCount: ${formatNumber(diagnostics.fallbackCount)}`,
+    `- nonFiniteValueCount: ${formatNumber(diagnostics.nonFiniteValueCount)}`,
+    `- probabilityRangeViolationCount: ${formatNumber(diagnostics.probabilityRangeViolationCount)}`,
+    `- identityViolationCount: ${formatNumber(diagnostics.identityViolationCount)}`,
+    `- geometryEvaluationMismatchCount: ${formatNumber(diagnostics.geometryEvaluationMismatchCount)}`,
+    `- eligibleRngMismatchCount: ${formatNumber(diagnostics.eligibleRngMismatchCount)}`,
+    "",
+    "### Defense Resolution Authority Map",
+    "",
+    "| Resolution | Authority |",
+    "| --- | --- |",
+    ...Object.entries(
+      defense?.authority || RESOLUTION_AUTHORITY_CONFIG
+    ).map(([key, value]) => `| ${mdCell(key)} | ${mdCell(value)} |`),
+    "",
+    "### Simple Catch Defense Shadow Definitions and Limitations",
+    "",
+    `- Eligibility: ${mdCell(definition.eligibility)}`,
+    `- Provisional model: ${mdCell(definition.model)}`,
+    `- Common clock: ${mdCell(definition.commonClock)}`,
+    `- Responsible Fielder: ${mdCell(definition.responsibleFielder)}`,
+    `- Alignment: ${mdCell(definition.alignment)}`,
+    `- Authority: ${mdCell(definition.authority)}`,
+    `- Excluded inputs: ${mdCell(definition.excludedInputs)}`,
+    `- Missing defense: ${mdCell(definition.missingPhysics)}`,
+    `- Statcast Catch Probability glossary: ${mdCell(definition.catchProbabilityUrl)}`,
+    `- Statcast Outs Above Average glossary: ${mdCell(definition.outsAboveAverageUrl)}`,
   ];
 }
 
@@ -987,7 +1144,7 @@ export function buildMeasurementMarkdown(options) {
     players, pitchers, gameDistribution, definitions, modelLimitations,
     validationPreset, validationPresetLabel, referenceBenchmark,
     referenceComparison, contactDisposition, pitchLocation, direction,
-    geometry,
+    geometry, defense,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -1093,6 +1250,8 @@ export function buildMeasurementMarkdown(options) {
     ...directionShadowLines(direction, definitions),
     "",
     ...geometryShadowLines(geometry, definitions),
+    "",
+    ...defenseShadowLines(defense, definitions, run),
     "",
     "## EV/LA Batted Ball Profile",
     "",
@@ -1200,6 +1359,10 @@ export function buildMeasurementMarkdown(options) {
     `- Geometry vs Catch Probability: ${definitions.geometryShadow.catchProbabilityDistinction}`,
     `- Geometry authority: ${definitions.geometryShadow.authority}`,
     `- Geometry excluded inputs: ${definitions.geometryShadow.excludedInputs}`,
+    `- Defense eligibility: ${definitions.defenseShadow.eligibility}`,
+    `- Defense model: ${definitions.defenseShadow.model}`,
+    `- Defense authority: ${definitions.defenseShadow.authority}`,
+    `- Defense excluded inputs: ${definitions.defenseShadow.excludedInputs}`,
     `- AIR: ${definitions.battedBallClasses.AIR}`,
     "",
     "## AIへの確認依頼 / AI Review Request",

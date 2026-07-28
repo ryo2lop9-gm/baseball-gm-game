@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Geometry Shadow Debugger</title>
+  <title>Geometry / Simple Catch Defense Shadow Debugger</title>
   <style>
     :root {
       color-scheme: light;
@@ -91,6 +91,22 @@
     .summary-row dt { color: #526c57; }
     .summary-row dd { margin: 0; overflow-wrap: anywhere; }
 
+    .candidate-table {
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      margin-top: 16px;
+      width: 100%;
+    }
+
+    .candidate-table th, .candidate-table td {
+      border-bottom: 1px solid #d8e3d5;
+      padding: 5px 3px;
+      text-align: right;
+    }
+
+    .candidate-table th:first-child,
+    .candidate-table td:first-child { text-align: left; }
+
     .field-wrap {
       aspect-ratio: 1.16;
       background: #1e6d3b;
@@ -135,9 +151,9 @@
 </head>
 <body>
   <main>
-    <h1>Geometry Shadow Debugger</h1>
+    <h1>Geometry / Defense Shadow Debugger</h1>
     <p class="lede">
-      暫定2D Geometry Shadowを可視化する独立開発ページです。試合結果や守備判定は表示しません。
+      暫定2D Geometryとfly / popup限定の単純捕球Defense Shadowを可視化する独立開発ページです。Shadow結果は試合結果へ影響しません。
     </p>
     <div class="layout">
       <section class="card" aria-labelledby="inputs-heading">
@@ -155,10 +171,28 @@
             Spray angle (°)
             <input id="spray-angle" type="number" min="-45" max="45" step="0.1" value="12" required />
           </label>
-          <button type="submit">Render geometry</button>
+          <label>
+            Responsible Fielder FLD
+            <input id="fielder-fielding" type="number" min="0" max="100" step="1" value="50" required />
+          </label>
+          <label>
+            Responsible Fielder SPD
+            <input id="fielder-speed" type="number" min="0" max="100" step="1" value="50" required />
+          </label>
+          <label>
+            Defense seed
+            <input id="defense-seed" type="number" min="0" max="4294967295" step="1" value="123456789" required />
+          </label>
+          <button type="submit">Render Geometry + Defense</button>
         </form>
         <p id="error-output" class="error" role="alert"></p>
         <dl id="geometry-summary" class="summary"></dl>
+        <table class="candidate-table">
+          <thead>
+            <tr><th>Pos</th><th>Direction</th><th>pReach avg</th><th>pSecure avg</th><th>pCatch avg</th></tr>
+          </thead>
+          <tbody id="defense-candidates"></tbody>
+        </table>
       </section>
       <section class="card" aria-labelledby="field-heading">
         <h2 id="field-heading">Field view</h2>

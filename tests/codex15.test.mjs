@@ -270,8 +270,19 @@ function normalizeLegacySummary(summary) {
   delete normalized.run.directionMode;
   delete normalized.run.directionSeed;
   delete normalized.run.geometryMode;
+  delete normalized.run.defenseMode;
+  delete normalized.run.defenseSeed;
   delete normalized.direction;
   delete normalized.geometry;
+  delete normalized.defense;
+  const removeSpeed = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (value.ratings && typeof value.ratings === "object") {
+      delete value.ratings.speed;
+    }
+    for (const child of Object.values(value)) removeSpeed(child);
+  };
+  removeSpeed(normalized);
   for (const side of ["away", "home"]) {
     for (const player of normalized.players[side]) {
       player.key = "<player-key>";
@@ -731,7 +742,7 @@ test("off and shadow modes preserve main random call counts", () => {
 test("off and shadow preserve game result, EV/LA, QoC, outcome, and Pitch Location", () => {
   const baseline = {
     gameplayDigest:
-      "7343b7db7be91b52c5b87bb578b9d49b2d01375faea2a1a3690dcdbde75098d8",
+      "6894c21c327a6e08a469c0ade0ad330d979fdf419946d5f18af8bf9dc346ec2a",
     battedBallDigest:
       "10da4fcfcbabc3f7d8601c22df3ea9df4eae79b28d17ae83d82fe2daff1509fd",
     pitchDigest:
@@ -842,16 +853,16 @@ test("Direction summary retains aggregates but no raw event collection or rolls"
   );
 });
 
-test("Summary and Report schemas are version five", () => {
+test("Summary and Report schemas are version six", () => {
   const report = buildMeasurementReportObject({
     summary: measurementSummary,
     teams: compatibilityTeams,
     generatedAt: "2026-07-28T00:00:00.000Z",
   });
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 5);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 5);
-  assert.equal(measurementSummary.reportSchemaVersion, 5);
-  assert.equal(report.reportSchemaVersion, 5);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 6);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 6);
+  assert.equal(measurementSummary.reportSchemaVersion, 6);
+  assert.equal(report.reportSchemaVersion, 6);
   assert.equal(report.direction.model, "gm_basic_direction_shadow_v1");
 });
 
@@ -865,7 +876,10 @@ test("Markdown contains the Direction Shadow section and required constraints", 
   assert.match(markdown, /sprayAngle is batted-ball field direction/);
   assert.match(markdown, /Statcast Attack Direction/);
   assert.match(markdown, /uniform continuous angle/);
-  assert.match(markdown, /not connected to outcomes or defense/);
+  assert.match(
+    markdown,
+    /not connected to legacy outcomes or authoritative defense/
+  );
   assert.match(markdown, /Timing and a physical intercept\/contact point/);
   assert.match(markdown, /course and locationCourse are not Direction inputs/);
   assert.match(markdown, /baseballsavant\.mlb\.com\/csv-docs/);

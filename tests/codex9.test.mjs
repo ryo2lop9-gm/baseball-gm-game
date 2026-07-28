@@ -497,7 +497,7 @@ test("report Markdown and JSON contain complete, finite, shareable data", () => 
   }
   assert.match(markdown, /部分結果/);
   assert.match(markdown, /seed: 123/);
-  assert.equal(report.reportSchemaVersion, 5);
+  assert.equal(report.reportSchemaVersion, 6);
   assert.equal(report.partial, true);
   assert.equal(report.teams.away.lineup.length, 9);
   assert.equal(report.engineConfig.evBandwidth, 3);

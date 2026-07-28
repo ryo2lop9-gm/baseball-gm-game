@@ -57,7 +57,12 @@ test("GM basic symmetric preset has exact independent batter and pitcher objects
   assert.equal(teams.away.lineup.length, 9);
   assert.equal(teams.home.lineup.length, 9);
   for (const batter of [...teams.away.lineup, ...teams.home.lineup]) {
-    assert.deepEqual(batter.ratings, { contact: 60, power: 60, eye: 50 });
+    assert.deepEqual(batter.ratings, {
+      contact: 60,
+      power: 60,
+      eye: 50,
+      speed: 50,
+    });
   }
   assert.equal(new Set([...teams.away.lineup, ...teams.home.lineup]).size, 18);
 
@@ -65,7 +70,11 @@ test("GM basic symmetric preset has exact independent batter and pitcher objects
   assert.equal(pitchers.length, 6);
   assert.equal(new Set(pitchers).size, 6);
   for (const pitcher of pitchers) {
-    assert.deepEqual(pitcher.ratings, { control: 58, stuff: 61 });
+    assert.deepEqual(pitcher.ratings, {
+      control: 58,
+      stuff: 61,
+      speed: 50,
+    });
     assert.deepEqual(pitcher.pitchMix, EXPECTED_PITCH_MIX);
   }
   assert.equal(new Set(pitchers.map((pitcher) => pitcher.pitchMix)).size, 6);
@@ -78,6 +87,7 @@ test("existing average-lineup versus power-pitcher preset is preserved", () => {
   assert.deepEqual(teams.home.startingPitcher.ratings, {
     control: 56,
     stuff: 70,
+    speed: 50,
   });
   assert.equal(teams.home.startingPitcher.pitchMix.fourSeam.velocity, 97.2);
 });
@@ -199,7 +209,7 @@ test("reference comparison marks approximate and unavailable rows explicitly", (
   assert.equal(barrel.accuracy, "not_comparable");
 });
 
-test("schema v5 Markdown and JSON include preset, benchmark, comparison, and disposition", async () => {
+test("schema v6 Markdown and JSON include preset, benchmark, comparison, and disposition", async () => {
   const teams = createGmBasicReferenceValidationTeams();
   const summary = await runMeasurementBatches({
     awayTeam: teams.away,
@@ -221,7 +231,7 @@ test("schema v5 Markdown and JSON include preset, benchmark, comparison, and dis
   const json = buildMeasurementJson(options);
   const parsed = JSON.parse(json);
 
-  assert.equal(report.reportSchemaVersion, 5);
+  assert.equal(report.reportSchemaVersion, 6);
   assert.equal(report.validationPreset, "gm_basic_symmetric_reference");
   assert.equal(report.referenceBenchmark.season, 2025);
   assert.ok(report.referenceComparison.length >= 25);
@@ -236,7 +246,7 @@ test("schema v5 Markdown and JSON include preset, benchmark, comparison, and dis
   }
   assert.match(markdown, /validationPreset: gm_basic_symmetric_reference/);
   assert.doesNotMatch(json, /NaN|Infinity|undefined/);
-  assert.equal(parsed.reportSchemaVersion, 5);
+  assert.equal(parsed.reportSchemaVersion, 6);
   assert.equal(parsed.validationPreset, "gm_basic_symmetric_reference");
 });
 

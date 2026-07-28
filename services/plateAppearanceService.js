@@ -1,6 +1,8 @@
 import { generateFairBattedBall } from "./evLaContactService.js";
 import { generateDirectionShadow } from "./battedBallDirectionService.js";
 import { generateGeometryShadow } from "./defense/battedBallGeometryService.js";
+import { generateDefenseShadow } from "./defense/defenseShadowService.js";
+import { resolveActiveDefense } from "./defensiveAlignmentService.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 function clamp(value, min, max) {
@@ -514,11 +516,31 @@ export function resolvePlateAppearanceResult({
           launchAngle: battedBall.launchAngle,
           directionShadow,
         });
+  const defenseMode = options?.defenseMode ?? "off";
+  if (defenseMode !== "off" && defenseMode !== "shadow") {
+    const error = new Error("Defense mode is invalid.");
+    error.code = "BATTED_BALL_DEFENSE_INPUT_INVALID";
+    error.context = { defenseMode };
+    throw error;
+  }
+  const activeDefenseSide = state.half === "top" ? "home" : "away";
+  const defenseShadow =
+    defenseMode === "shadow"
+      ? generateDefenseShadow({
+          mode: defenseMode,
+          battedBallEventId,
+          geometryShadow,
+          directionShadow,
+          activeDefense: resolveActiveDefense(state, activeDefenseSide),
+          defenseSeed: options?.defenseSeed,
+        })
+      : null;
   const battedBallWithDirectionAndGeometry = {
     ...battedBall,
     battedBallEventId,
     directionShadow,
     geometryShadow,
+    defenseShadow,
   };
 
   const contactResult = resolveBattedBallResult(

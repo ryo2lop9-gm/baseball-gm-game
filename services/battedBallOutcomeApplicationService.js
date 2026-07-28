@@ -1,4 +1,5 @@
 import { getPitchTypeLabel } from "../config/pitchConfig.js";
+import { BATTED_BALL_DEFENSE_CONFIG } from "../config/defenseProbabilityConfig.js";
 import { FIELD_GEOMETRY_CONFIG } from "../config/fieldGeometryConfig.js";
 import { RESOLUTION_AUTHORITY_CONFIG } from "../config/resolutionAuthorityConfig.js";
 import { TRAJECTORY_MODEL_CONFIG } from "../config/trajectoryModelConfig.js";
@@ -91,6 +92,7 @@ export function applySelectedBattedBallOutcome({
   );
   const directionShadow = battedBall?.directionShadow;
   const geometryShadow = battedBall?.geometryShadow;
+  const defenseShadow = battedBall?.defenseShadow;
   const geometryTrajectory = geometryShadow?.trajectory;
 
   // QoC remains an analysis/logging label and never selects the outcome.
@@ -185,6 +187,72 @@ export function applySelectedBattedBallOutcome({
       isOverFence: geometryShadow?.isOverFence ?? null,
       resolutionAuthority:
         geometryShadow?.authority ?? RESOLUTION_AUTHORITY_CONFIG,
+      defenseMode:
+        defenseShadow?.mode ?? BATTED_BALL_DEFENSE_CONFIG.defaultMode,
+      defenseModel:
+        defenseShadow?.model ?? BATTED_BALL_DEFENSE_CONFIG.model,
+      defenseSource:
+        defenseShadow?.source ?? BATTED_BALL_DEFENSE_CONFIG.source,
+      defenseEventSchemaVersion:
+        defenseShadow?.defenseEventSchemaVersion ??
+        BATTED_BALL_DEFENSE_CONFIG.defenseEventSchemaVersion,
+      defenseEligible: defenseShadow?.eligible ?? false,
+      defenseExclusionReason:
+        defenseShadow?.exclusionReason ?? "mode_off",
+      responsibleFielderPosition:
+        defenseShadow?.responsibleFielder?.position ?? null,
+      responsibleFielderPlayerId:
+        defenseShadow?.responsibleFielder?.playerId ?? null,
+      movementDirection: defenseShadow?.movementDirection ?? null,
+      defenseFieldingRating:
+        defenseShadow?.ratings?.fielding ?? null,
+      defenseSpeedRating: defenseShadow?.ratings?.speed ?? null,
+      defensePathDistanceFt:
+        defenseShadow?.timing?.pathDistanceFt ?? null,
+      defenseBallTimeSec:
+        defenseShadow?.timing?.ballTimeSec ?? null,
+      defenseAverageMarginSec:
+        defenseShadow?.timing?.adjustedAverageMargin ?? null,
+      defenseActualMarginSec:
+        defenseShadow?.timing?.adjustedActualMargin ?? null,
+      pReachAverage:
+        defenseShadow?.probabilities?.pReachAverage ?? null,
+      pSecureAverage:
+        defenseShadow?.probabilities?.pSecureAverage ?? null,
+      pReachActual:
+        defenseShadow?.probabilities?.pReachActual ?? null,
+      pSecureActual:
+        defenseShadow?.probabilities?.pSecureActual ?? null,
+      pStandardAlignmentOut:
+        defenseShadow?.probabilities?.pStandardAlignmentOut ?? null,
+      pAlignedAverageOut:
+        defenseShadow?.probabilities?.pAlignedAverageOut ?? null,
+      pActualOut:
+        defenseShadow?.probabilities?.pActualOut ?? null,
+      reachSuccess:
+        defenseShadow?.shadowCatchResult?.reachSuccess ?? null,
+      secureAttempted:
+        defenseShadow?.shadowCatchResult?.secureAttempted ?? null,
+      secureSuccess:
+        defenseShadow?.shadowCatchResult?.secureSuccess ?? null,
+      shadowCaught:
+        defenseShadow?.shadowCatchResult?.caught ?? null,
+      simCatchOAA: defenseShadow?.metrics?.simCatchOAA ?? null,
+      expectedSkillOuts:
+        defenseShadow?.metrics?.expectedSkillOuts ?? null,
+      executionResidual:
+        defenseShadow?.metrics?.executionResidual ?? null,
+      teamOAA_vsStandard:
+        defenseShadow?.metrics?.teamOAA_vsStandard ?? null,
+      teamExecutionOAA:
+        defenseShadow?.metrics?.teamExecutionOAA ?? null,
+      positioningExpectedOuts:
+        defenseShadow?.metrics?.positioningExpectedOuts ?? null,
+      defenseRngCalls: defenseShadow?.defenseRngCalls ?? 0,
+      defenseFallbackUsed: defenseShadow?.fallbackUsed ?? false,
+      shadowAuthority:
+        defenseShadow?.shadowAuthority ??
+        BATTED_BALL_DEFENSE_CONFIG.shadowAuthority,
       evLaKey,
       source,
       sampleQuality,

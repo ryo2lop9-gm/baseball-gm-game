@@ -127,6 +127,12 @@ export function createFastSimulationOptions(runtime = {}) {
   if (runtime.geometryMode === "off" || runtime.geometryMode === "shadow") {
     options.geometryMode = runtime.geometryMode;
   }
+  if (runtime.defenseMode === "off" || runtime.defenseMode === "shadow") {
+    options.defenseMode = runtime.defenseMode;
+  }
+  if (Number.isInteger(runtime.defenseSeed)) {
+    options.defenseSeed = runtime.defenseSeed;
+  }
 
   return options;
 }

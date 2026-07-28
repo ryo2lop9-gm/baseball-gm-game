@@ -110,6 +110,21 @@ function validateDefenseRating(errors, field, value) {
   }
 }
 
+export function normalizePlayerSpeed(speed = NEUTRAL_DEFENSE_RATING) {
+  if (
+    typeof speed !== "number" ||
+    !Number.isFinite(speed) ||
+    speed < MIN_DEFENSE_RATING ||
+    speed > MAX_DEFENSE_RATING
+  ) {
+    const error = new Error("Player speed rating is invalid.");
+    error.code = "PLAYER_SPEED_INVALID";
+    error.context = { field: "speed", value: speed };
+    throw error;
+  }
+  return speed;
+}
+
 export function validatePlayerDefense(defense) {
   const errors = [];
   if (!defense || typeof defense !== "object" || Array.isArray(defense)) {
@@ -229,7 +244,8 @@ export function getPlayerSeasonStats(player) {
  * gameStats と seasonStats を完全分離する
  */
 export function createGameBatter(name, contact, power, eye, extraProfile = {}) {
-  const { defense, ...profileExtra } = extraProfile || {};
+  const { defense, speed, ...profileExtra } = extraProfile || {};
+  const normalizedSpeed = normalizePlayerSpeed(speed);
   return {
     profile: createBatterProfile(name, profileExtra),
     name,
@@ -238,6 +254,7 @@ export function createGameBatter(name, contact, power, eye, extraProfile = {}) {
       contact,
       power,
       eye,
+      speed: normalizedSpeed,
     },
     defense: createPlayerDefense(defense),
     gameStats: createEmptyBatterGameStats(),
@@ -255,7 +272,8 @@ export function createGamePitcher(
   pitchMix = {},
   extraProfile = {}
 ) {
-  const { defense, ...profileExtra } = extraProfile || {};
+  const { defense, speed, ...profileExtra } = extraProfile || {};
+  const normalizedSpeed = normalizePlayerSpeed(speed);
   const pitcherDefense = createPlayerDefense(defense, {
     defaultPrimaryPosition: "P",
   });
@@ -275,6 +293,7 @@ export function createGamePitcher(
     ratings: {
       control,
       stuff,
+      speed: normalizedSpeed,
     },
     defense: pitcherDefense,
     pitchMix,

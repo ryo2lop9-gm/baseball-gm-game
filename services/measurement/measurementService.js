@@ -4,6 +4,7 @@ import {
 } from "../../engine/core/engineCore.js";
 import { PITCH_LOCATION_CONFIG } from "../../config/pitchLocationConfig.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
+import { BATTED_BALL_DEFENSE_CONFIG } from "../../config/defenseProbabilityConfig.js";
 import { FIELD_GEOMETRY_CONFIG } from "../../config/fieldGeometryConfig.js";
 import { createInitialSimState } from "../../state/gameState.js";
 import {
@@ -35,10 +36,16 @@ import {
   mergeGeometryMeasurement,
   recordGeometryMeasurement,
 } from "./measurementGeometryService.js";
+import {
+  createDefenseMeasurementAccumulator,
+  finalizeDefenseMeasurement,
+  mergeDefenseMeasurement,
+  recordDefenseMeasurement,
+} from "./measurementDefenseService.js";
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
-export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 5;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 6;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -81,6 +88,11 @@ const STRUCTURAL_ERROR_CODES = new Set([
   "BATTED_BALL_GEOMETRY_DIRECTION_REQUIRED",
   "BATTED_BALL_GEOMETRY_INPUT_INVALID",
   "BATTED_BALL_GEOMETRY_OUTPUT_INVALID",
+  "BATTED_BALL_DEFENSE_GEOMETRY_REQUIRED",
+  "BATTED_BALL_DEFENSE_ACTIVE_DEFENSE_REQUIRED",
+  "BATTED_BALL_DEFENSE_SEED_REQUIRED",
+  "BATTED_BALL_DEFENSE_INPUT_INVALID",
+  "BATTED_BALL_DEFENSE_OUTPUT_INVALID",
   "EV_LA_LOOKUP_NOT_READY",
   "EV_LA_LOOKUP_INVALID",
   "EV_LA_LOOKUP_LOAD_FAILED",
@@ -175,12 +187,14 @@ export function createEmptyMeasurementAccumulator() {
     advanced: createAdvancedMeasurementAccumulator(),
     direction: createDirectionMeasurementAccumulator(),
     geometry: createGeometryMeasurementAccumulator(),
+    defense: createDefenseMeasurementAccumulator(),
   };
 }
 
 export function createGameMeasurementAccumulator(
   directionMode = "shadow",
-  geometryMode = "shadow"
+  geometryMode = "shadow",
+  defenseMode = "shadow"
 ) {
   return {
     qoc: {
@@ -198,6 +212,10 @@ export function createGameMeasurementAccumulator(
       geometryMode === FIELD_GEOMETRY_CONFIG.defaultMode
         ? null
         : createGeometryMeasurementAccumulator(),
+    defense:
+      defenseMode === BATTED_BALL_DEFENSE_CONFIG.defaultMode
+        ? null
+        : createDefenseMeasurementAccumulator(),
   };
 }
 
@@ -319,6 +337,9 @@ export function recordBattedBallMeasurement(gameAccumulator, event) {
   }
   if (gameAccumulator.geometry) {
     recordGeometryMeasurement(gameAccumulator.geometry, event);
+  }
+  if (gameAccumulator.defense) {
+    recordDefenseMeasurement(gameAccumulator.defense, event);
   }
   recordAdvancedBattedBallMeasurement(gameAccumulator.advanced, event);
 
@@ -446,6 +467,12 @@ export function commitCompletedMeasurementGame(
     mergeGeometryMeasurement(
       accumulator.geometry,
       gameAccumulator.geometry
+    );
+  }
+  if (gameAccumulator.defense) {
+    mergeDefenseMeasurement(
+      accumulator.defense,
+      gameAccumulator.defense
     );
   }
 }
@@ -640,6 +667,12 @@ export function finalizeMeasurementSummary(accumulator, run) {
     directionOpportunities: direction.opportunities,
     mode: geometryMode,
   });
+  const defenseMode =
+    run.defenseMode || BATTED_BALL_DEFENSE_CONFIG.defaultMode;
+  const defense = finalizeDefenseMeasurement(accumulator.defense, {
+    mode: defenseMode,
+    geometryEvaluations: geometry.opportunities,
+  });
 
   return {
     reportSchemaVersion: MEASUREMENT_SUMMARY_SCHEMA_VERSION,
@@ -649,6 +682,8 @@ export function finalizeMeasurementSummary(accumulator, run) {
       directionMode,
       directionSeed: direction.directionSeed,
       geometryMode,
+      defenseMode,
+      defenseSeed: run.defenseSeed ?? null,
       requestedGames: run.requestedGames,
       completedGames: accumulator.completedGames,
       failedGames: accumulator.failedGames,
@@ -666,6 +701,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
     pitchLocation: advanced.pitchLocation,
     direction,
     geometry,
+    defense,
     contactDisposition,
     referenceBenchmark,
     referenceComparison,
@@ -735,6 +771,23 @@ export async function runMeasurementBatches({
     error.context = { geometryMode, directionMode };
     throw error;
   }
+  const defenseMode =
+    runtime.defenseMode ?? BATTED_BALL_DEFENSE_CONFIG.shadowMode;
+  if (defenseMode !== "off" && defenseMode !== "shadow") {
+    const error = new Error("Measurement Defense mode is invalid.");
+    error.code = "BATTED_BALL_DEFENSE_INPUT_INVALID";
+    error.context = { defenseMode };
+    throw error;
+  }
+  if (
+    defenseMode === BATTED_BALL_DEFENSE_CONFIG.shadowMode &&
+    geometryMode !== FIELD_GEOMETRY_CONFIG.shadowMode
+  ) {
+    const error = new Error("Defense Shadow requires Geometry Shadow.");
+    error.code = "BATTED_BALL_DEFENSE_GEOMETRY_REQUIRED";
+    error.context = { defenseMode, geometryMode };
+    throw error;
+  }
   const directionSeed = normalizeSeed(
     runtime.directionSeed ??
       deriveNamespacedSeed(normalizedSeed, BATTED_BALL_DIRECTION_CONFIG.model)
@@ -750,6 +803,28 @@ export async function runMeasurementBatches({
     error.code = "BATTED_BALL_DIRECTION_RANDOM_SHARED";
     error.context = { directionMode };
     throw error;
+  }
+  let defenseSeed = null;
+  if (defenseMode === BATTED_BALL_DEFENSE_CONFIG.shadowMode) {
+    const derivedDefenseSeed = deriveNamespacedSeed(
+      normalizedSeed,
+      BATTED_BALL_DEFENSE_CONFIG.model
+    );
+    const rawDefenseSeed =
+      runtime.defenseSeed ?? derivedDefenseSeed;
+    if (
+      typeof rawDefenseSeed !== "number" ||
+      !Number.isFinite(rawDefenseSeed) ||
+      !Number.isInteger(rawDefenseSeed) ||
+      rawDefenseSeed < 0 ||
+      rawDefenseSeed > 0xffffffff
+    ) {
+      const error = new Error("Measurement Defense seed is invalid.");
+      error.code = "BATTED_BALL_DEFENSE_SEED_REQUIRED";
+      error.context = { defenseSeed: rawDefenseSeed };
+      throw error;
+    }
+    defenseSeed = rawDefenseSeed >>> 0;
   }
   const createGameState =
     runtime.createGameState ||
@@ -774,7 +849,8 @@ export async function runMeasurementBatches({
       const gameIndex = accumulator.completedGames + accumulator.failedGames + 1;
       const gameAccumulator = createGameMeasurementAccumulator(
         directionMode,
-        geometryMode
+        geometryMode,
+        defenseMode
       );
 
       try {
@@ -785,6 +861,8 @@ export async function runMeasurementBatches({
           directionRandom,
           gameKey: `seed:${normalizedSeed}:game:${gameIndex}`,
           geometryMode,
+          defenseMode,
+          defenseSeed,
           onPitchMeasurement: (event) =>
             recordPitchMeasurementEvent(gameAccumulator, event),
           onBattedBallMeasurement: (event) =>
@@ -804,6 +882,8 @@ export async function runMeasurementBatches({
             directionMode,
             directionSeed,
             geometryMode,
+            defenseMode,
+            defenseSeed,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -821,6 +901,8 @@ export async function runMeasurementBatches({
             directionMode,
             directionSeed,
             geometryMode,
+            defenseMode,
+            defenseSeed,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -851,6 +933,8 @@ export async function runMeasurementBatches({
     directionMode,
     directionSeed,
     geometryMode,
+    defenseMode,
+    defenseSeed,
     requestedGames,
     elapsedMs: now() - startedAt,
   });

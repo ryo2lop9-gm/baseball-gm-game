@@ -580,7 +580,7 @@ test("Geometry off and shadow preserve Direction output exactly", () => {
 test("Geometry modes preserve game, EV, LA, QoC, lookup, and outcome digests", () => {
   const expected = {
     gameplayDigest:
-      "7343b7db7be91b52c5b87bb578b9d49b2d01375faea2a1a3690dcdbde75098d8",
+      "6894c21c327a6e08a469c0ade0ad330d979fdf419946d5f18af8bf9dc346ec2a",
     battedBallDigest:
       "10da4fcfcbabc3f7d8601c22df3ea9df4eae79b28d17ae83d82fe2daff1509fd",
     pitchDigest:
@@ -658,11 +658,11 @@ test("Geometry aggregation retains no raw events or raw value arrays", () => {
   assert.equal("events" in measurementSummary.geometry, false);
 });
 
-test("Summary and Report use schema v5", () => {
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 5);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 5);
-  assert.equal(measurementSummary.reportSchemaVersion, 5);
-  assert.equal(measurementReport.reportSchemaVersion, 5);
+test("Summary and Report use schema v6", () => {
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 6);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 6);
+  assert.equal(measurementSummary.reportSchemaVersion, 6);
+  assert.equal(measurementReport.reportSchemaVersion, 6);
   assert.equal(
     measurementReport.geometry.model,
     "provisional_ev_la_geometry_shadow_v1"
@@ -746,8 +746,8 @@ test("Markdown includes Geometry aggregates and every required limitation", () =
     "not MLB Catch Probability Opportunity Time",
     "not an official Statcast model",
     "Park walls, wind, spin",
-    "Catch probability, Responsible Fielder, and OAA",
-    "not connected to outcomes or defense",
+    "separate Defense Shadow consumes eligible Geometry events",
+    "not connected to legacy outcomes or authoritative defense",
     "selectedOutcome, QoC, course, and locationCourse",
     "https://baseballsavant.mlb.com/csv-docs",
     "https://www.mlb.com/glossary/statcast/catch-probability",
@@ -768,7 +768,7 @@ test("Visual Debugger imports the pure Geometry service directly", async () => {
   assert.match(html, /pages\/geometryDebuggerPage\.js/);
   assert.match(page, /battedBallGeometryService\.js/);
   assert.match(page, /generateGeometryShadow/);
-  assert.doesNotMatch(page, /selectBattedBallOutcome|responsibleFielder/);
+  assert.doesNotMatch(page, /selectBattedBallOutcome/);
 });
 
 test("Pitch Location and defensive inputs remain unchanged by Geometry", () => {
