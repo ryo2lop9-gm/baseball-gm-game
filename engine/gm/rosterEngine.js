@@ -110,6 +110,7 @@ export function createRosterState(team) {
   return {
     teamName: team?.name || "Unknown Team",
     lineup,
+    defensiveAlignment: clone(team?.defensiveAlignment || {}),
     bench: [],
     rotation: startingPitcher ? [startingPitcher] : [],
     bullpen,
@@ -172,6 +173,7 @@ export function buildTeamFromRoster(teamMeta, rosterState) {
     rotation,
     bullpen,
     lineup,
+    defensiveAlignment: clone(rosterState?.defensiveAlignment || {}),
   };
 }
 

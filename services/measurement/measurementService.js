@@ -57,6 +57,7 @@ const OUTCOME_KEYS = Object.freeze([
 ]);
 const STRUCTURAL_ERROR_CODES = new Set([
   "BATTED_BALL_MISSING",
+  "BATTED_BALL_OUTCOME_INVALID",
   "EV_LA_LOOKUP_NOT_READY",
   "EV_LA_LOOKUP_INVALID",
   "EV_LA_LOOKUP_LOAD_FAILED",
@@ -64,6 +65,10 @@ const STRUCTURAL_ERROR_CODES = new Set([
 ]);
 const MAX_SIMULATION_ERRORS = 10;
 const MAX_CONSECUTIVE_FAILURES = 10;
+
+export function isStructuralMeasurementError(error) {
+  return STRUCTURAL_ERROR_CODES.has(error?.code);
+}
 
 function zeroMap(keys) {
   return Object.fromEntries(keys.map((key) => [key, 0]));
@@ -672,7 +677,7 @@ export async function runMeasurementBatches({
         recordSimulationError(accumulator, gameIndex, error);
         consecutiveFailures += 1;
 
-        if (STRUCTURAL_ERROR_CODES.has(error?.code)) {
+        if (isStructuralMeasurementError(error)) {
           error.measurementSummary = finalizeMeasurementSummary(accumulator, {
             status: "error",
             seed: normalizedSeed,

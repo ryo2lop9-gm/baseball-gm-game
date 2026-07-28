@@ -57,6 +57,8 @@ function normalizeStateForCompatibility(state) {
   const normalized = structuredClone(state);
   const visit = (value) => {
     if (!value || typeof value !== "object") return;
+    delete value.defense;
+    delete value.defensiveAlignment;
     if (value.profile && typeof value.profile === "object") {
       value.profile.id = "<profile-id>";
     }

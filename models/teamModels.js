@@ -1,4 +1,12 @@
-import { createGameBatter, createGamePitcher } from "./playerModels.js";
+import {
+  DEFENSIVE_LINEUP_POSITIONS,
+  DESIGNATED_HITTER_POSITION,
+} from "../config/defenseConfig.js";
+import {
+  createGameBatter,
+  createGamePitcher,
+  createPlayerDefense,
+} from "./playerModels.js";
 
 /**
  * teamModels.js の責務
@@ -22,8 +30,33 @@ function createBullpenPitchers(configs) {
   );
 }
 
-function createTokyoWaves() {
+function createGameableTeam(team) {
+  const battingPositions = [
+    ...DEFENSIVE_LINEUP_POSITIONS,
+    DESIGNATED_HITTER_POSITION,
+  ];
+  const lineup = team.lineup.map((player, index) => ({
+    ...player,
+    defense: createPlayerDefense({
+      primaryPosition: battingPositions[index],
+    }),
+  }));
+  const defensiveAlignment = Object.fromEntries(
+    DEFENSIVE_LINEUP_POSITIONS.map((position, index) => [
+      position,
+      lineup[index].profile.id,
+    ])
+  );
+
   return {
+    ...team,
+    lineup,
+    defensiveAlignment,
+  };
+}
+
+function createTokyoWaves() {
+  return createGameableTeam({
     name: "Tokyo Waves",
     startingPitcher: createGamePitcher("R. Sato", 58, 56, {
       fourSeam: 0.45,
@@ -66,11 +99,11 @@ function createTokyoWaves() {
       createGameBatter("Shimizu", 53, 44, 55),
       createGameBatter("Fujita", 49, 40, 51),
     ],
-  };
+  });
 }
 
 function createOsakaComets() {
-  return {
+  return createGameableTeam({
     name: "Osaka Comets",
     startingPitcher: createGamePitcher("K. Tanaka", 55, 59, {
       fourSeam: 0.38,
@@ -113,11 +146,11 @@ function createOsakaComets() {
       createGameBatter("Ueda", 52, 46, 54),
       createGameBatter("Maeda", 48, 41, 52),
     ],
-  };
+  });
 }
 
 function createNagoyaArrows() {
-  return {
+  return createGameableTeam({
     name: "Nagoya Arrows",
     startingPitcher: createGamePitcher("T. Suzuki", 61, 54, {
       fourSeam: 0.43,
@@ -160,11 +193,11 @@ function createNagoyaArrows() {
       createGameBatter("Mizuno", 51, 45, 54),
       createGameBatter("Yoshida", 50, 41, 53),
     ],
-  };
+  });
 }
 
 function createFukuokaBlaze() {
-  return {
+  return createGameableTeam({
     name: "Fukuoka Blaze",
     startingPitcher: createGamePitcher("H. Yamamoto", 53, 62, {
       fourSeam: 0.36,
@@ -207,7 +240,7 @@ function createFukuokaBlaze() {
       createGameBatter("Nakano", 53, 46, 53),
       createGameBatter("Morita", 49, 43, 50),
     ],
-  };
+  });
 }
 
 function createMlbAverageLineup(prefix) {
@@ -255,7 +288,7 @@ function createGmBasicReferencePitcher(name) {
 }
 
 function createGmBasicReferenceTeam({ name, playerPrefix }) {
-  return {
+  return createGameableTeam({
     name,
     startingPitcher: createGmBasicReferencePitcher(`${playerPrefix} Starter`),
     bullpen: [
@@ -263,7 +296,7 @@ function createGmBasicReferenceTeam({ name, playerPrefix }) {
       createGmBasicReferencePitcher(`${playerPrefix} RP 2`),
     ],
     lineup: createGmBasicReferenceLineup(playerPrefix),
-  };
+  });
 }
 
 export function createGmBasicReferenceValidationTeams() {
@@ -303,7 +336,7 @@ export function createMlbAverageValidationTeams() {
   });
 
   return {
-    away: {
+    away: createGameableTeam({
       name: "MLB Avg Lineup",
       startingPitcher: averageStarter,
       bullpen: createBullpenPitchers([
@@ -331,8 +364,8 @@ export function createMlbAverageValidationTeams() {
         },
       ]),
       lineup: createMlbAverageLineup("Avg"),
-    },
-    home: {
+    }),
+    home: createGameableTeam({
       name: "MLB Power Pitch Test",
       startingPitcher: powerStarter,
       bullpen: createBullpenPitchers([
@@ -360,7 +393,7 @@ export function createMlbAverageValidationTeams() {
         },
       ]),
       lineup: createMlbAverageLineup("PowerTest"),
-    },
+    }),
   };
 }
 

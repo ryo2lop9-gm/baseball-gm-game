@@ -1,6 +1,23 @@
 import { getPitchTypeLabel } from "../config/pitchConfig.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
+export const APPLICABLE_BATTED_BALL_OUTCOMES = Object.freeze([
+  "out",
+  "single",
+  "double",
+  "triple",
+  "homeRun",
+]);
+
+function assertApplicableBattedBallOutcome(selectedOutcome) {
+  if (APPLICABLE_BATTED_BALL_OUTCOMES.includes(selectedOutcome)) return;
+
+  const error = new Error("Selected batted-ball outcome is invalid.");
+  error.code = "BATTED_BALL_OUTCOME_INVALID";
+  error.context = { selectedOutcome };
+  throw error;
+}
+
 function recordVelocityResult(state, side, pitchVelocity, result) {
   const teamBox = state?.box?.[side];
   if (!teamBox) return;
@@ -60,6 +77,8 @@ export function applySelectedBattedBallOutcome({
   emitLog,
   emitLastPitchPatch,
 }) {
+  assertApplicableBattedBallOutcome(selectedOutcome);
+
   const outcomeSmoothing = smoothing || {};
   const battedBallSuffix = formatBattedBallSuffix(
     battedBall,
@@ -245,31 +264,35 @@ export function applySelectedBattedBallOutcome({
     return { outcome: selectedOutcome, runsScored: runs };
   }
 
-  state.box[side].hits += 1;
-  state.box[side].hr += 1;
-  const runs = advanceRunnersOnHit(state, batter, 4);
-  addHitStat(batter, "HR", runs);
-  recordVelocityResult(state, side, pitchVelocity, {
-    PA: 1,
-    AB: 1,
-    H: 1,
-    HR: 1,
-    totalBases: 4,
-  });
-  emitLastPitchPatch(options, {
-    resultText: `${qoc} / 本塁打${battedBallSuffix}`,
-  });
-  emitLog(
-    options,
-    `${batter.name}: ${getPitchTypeLabel(
-      pitchType
-    )}を${qoc}で本塁打。${runs}点${battedBallSuffix}`
-  );
-  emitOutcomeMeasurement(runs);
-  moveToNextBatter(state);
-  finishPlateAppearanceState(state, options);
-  maybeEndGameMidInning(state, {
-    emitLog: (text) => emitLog(options, text),
-  });
-  return { outcome: selectedOutcome, runsScored: runs };
+  if (selectedOutcome === "homeRun") {
+    state.box[side].hits += 1;
+    state.box[side].hr += 1;
+    const runs = advanceRunnersOnHit(state, batter, 4);
+    addHitStat(batter, "HR", runs);
+    recordVelocityResult(state, side, pitchVelocity, {
+      PA: 1,
+      AB: 1,
+      H: 1,
+      HR: 1,
+      totalBases: 4,
+    });
+    emitLastPitchPatch(options, {
+      resultText: `${qoc} / 本塁打${battedBallSuffix}`,
+    });
+    emitLog(
+      options,
+      `${batter.name}: ${getPitchTypeLabel(
+        pitchType
+      )}を${qoc}で本塁打。${runs}点${battedBallSuffix}`
+    );
+    emitOutcomeMeasurement(runs);
+    moveToNextBatter(state);
+    finishPlateAppearanceState(state, options);
+    maybeEndGameMidInning(state, {
+      emitLog: (text) => emitLog(options, text),
+    });
+    return { outcome: selectedOutcome, runsScored: runs };
+  }
+
+  throw new Error("Unreachable batted-ball outcome branch.");
 }

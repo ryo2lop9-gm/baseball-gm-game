@@ -130,12 +130,18 @@ export function createTuningFacade({
       away: {
         name: bundle.awayMeta.name,
         lineup: structuredClone(bundle.awayRoster.lineup || []),
+        defensiveAlignment: structuredClone(
+          bundle.awayRoster.defensiveAlignment || {}
+        ),
         startingPitcher: structuredClone(bundle.awayRoster.rotation?.[0] || null),
         bullpen: structuredClone(bundle.awayRoster.bullpen || []),
       },
       home: {
         name: bundle.homeMeta.name,
         lineup: structuredClone(bundle.homeRoster.lineup || []),
+        defensiveAlignment: structuredClone(
+          bundle.homeRoster.defensiveAlignment || {}
+        ),
         startingPitcher: structuredClone(bundle.homeRoster.rotation?.[0] || null),
         bullpen: structuredClone(bundle.homeRoster.bullpen || []),
       },
