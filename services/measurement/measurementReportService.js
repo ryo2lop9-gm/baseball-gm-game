@@ -1,11 +1,12 @@
 import { SMOOTHING_CONFIG } from "../evLaOutcomeService.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
+import { RESOLUTION_AUTHORITY_CONFIG } from "../../config/resolutionAuthorityConfig.js";
 import {
   buildMeasurementReferenceComparison,
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
 
-export const MEASUREMENT_REPORT_SCHEMA_VERSION = 4;
+export const MEASUREMENT_REPORT_SCHEMA_VERSION = 5;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
@@ -253,6 +254,27 @@ export function getMeasurementDefinitions() {
       statcastGlossaryUrl:
         "https://www.mlb.com/glossary/statcast/attack-direction",
     },
+    geometryShadow: {
+      coordinates:
+        "The field is a two-dimensional coordinate system in feet with home plate at the origin, negative x toward third base/left field, positive x toward first base/right field, and positive y toward center field.",
+      commonClock:
+        "Geometry time uses batted-ball contact as t = 0.",
+      catchProbabilityDistinction:
+        "This common clock is not MLB Catch Probability Opportunity Time.",
+      model:
+        "provisional_ev_la_geometry_shadow_v1 is a provisional deterministic Shadow model and is not an official Statcast model.",
+      missingPhysics:
+        "Park walls, wind, spin, and rigorous three-dimensional aerodynamics are not implemented.",
+      unavailableDefense:
+        "Catch probability, Responsible Fielder, and OAA are not implemented.",
+      authority:
+        "Geometry Shadow is informational only and is not connected to outcomes or defense.",
+      excludedInputs:
+        "selectedOutcome, QoC, course, and locationCourse are not Geometry inputs.",
+      csvDocsUrl: "https://baseballsavant.mlb.com/csv-docs",
+      catchProbabilityUrl:
+        "https://www.mlb.com/glossary/statcast/catch-probability",
+    },
     evBands: "<70; 70-79.9; 80-89.9; 90-94.9; 95-99.9; 100-104.9; 105+ (lower bound inclusive except the first band)",
     laBands: "<-10; -10 to <0; 0 to <10; 10 to <25; 25 to <50; 50+ (lower bound inclusive except the first band)",
     percentileMethod:
@@ -339,6 +361,7 @@ export function buildMeasurementReportObject({
     plateDiscipline: summary?.plateDiscipline || {},
     pitchLocation: summary?.pitchLocation || {},
     direction: summary?.direction || {},
+    geometry: summary?.geometry || {},
     batting: results,
     pitching: buildPitchingSummary(pitchers),
     players: summary?.players || { away: [], home: [] },
@@ -517,6 +540,100 @@ function directionShadowLines(direction, definitions) {
     `- Pitch-location inputs: ${mdCell(definition.pitchLocationInputs)}`,
     `- Baseball Savant CSV docs: ${mdCell(definition.csvDocsUrl)}`,
     `- Statcast Attack Direction glossary: ${mdCell(definition.statcastGlossaryUrl)}`,
+  ];
+}
+
+function geometryHistogramLine(label, histogram) {
+  return `| ${mdCell(label)} | ${formatNumber(histogram?.count)} | ${formatNumber(histogram?.average, 2)} | ${formatNumber(histogram?.min, 2)} | ${formatNumber(histogram?.p10, 2)} | ${formatNumber(histogram?.p25, 2)} | ${formatNumber(histogram?.p50, 2)} | ${formatNumber(histogram?.p75, 2)} | ${formatNumber(histogram?.p90, 2)} | ${formatNumber(histogram?.max, 2)} |`;
+}
+
+function geometryShadowLines(geometry, definitions) {
+  const diagnostics = geometry?.diagnostics || {};
+  const definition = definitions?.geometryShadow || {};
+  return [
+    "## Geometry Shadow",
+    "",
+    `- mode: ${mdCell(geometry?.mode)}`,
+    `- model: ${mdCell(geometry?.model)}`,
+    `- source: ${mdCell(geometry?.source)}`,
+    `- geometryEventSchemaVersion: ${formatNumber(geometry?.geometryEventSchemaVersion)}`,
+    `- coordinateSystem: ${mdCell(geometry?.coordinateSystem)}`,
+    `- opportunities: ${formatNumber(geometry?.opportunities)}`,
+    `- validEvents: ${formatNumber(geometry?.validEvents)}`,
+    `- invalidEvents: ${formatNumber(geometry?.invalidEvents)}`,
+    "",
+    "| Trajectory Class | count | pct |",
+    "| --- | ---: | ---: |",
+    ...Object.entries(geometry?.trajectoryClass || {}).map(
+      ([key, value]) =>
+        `| ${mdCell(key)} | ${value.count || 0} | ${formatPct(value.pct)} |`
+    ),
+    "",
+    "| Geometry Metric | count | mean | min | p10 | p25 | p50 | p75 | p90 | max |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    geometryHistogramLine(
+      "radialDistanceFt",
+      geometry?.radialDistance
+    ),
+    geometryHistogramLine("air hangTimeSec", geometry?.hangTime),
+    geometryHistogramLine(
+      "ground firstGroundDistanceFt",
+      geometry?.ground?.firstGroundDistance
+    ),
+    geometryHistogramLine(
+      "ground stopDistanceFt",
+      geometry?.ground?.stopDistance
+    ),
+    geometryHistogramLine(
+      "ground stopTimeSec",
+      geometry?.ground?.stopTime
+    ),
+    "",
+    "| Position | Candidates | Distance mean | Distance p50 | ETA mean | ETA p50 | Margin mean | Margin p50 |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(geometry?.fielders || {}).map(
+      ([position, value]) =>
+        `| ${mdCell(position)} | ${value.candidates || 0} | ${formatNumber(value.pathDistance?.average, 2)} | ${formatNumber(value.pathDistance?.p50, 2)} | ${formatNumber(value.eta?.average, 2)} | ${formatNumber(value.eta?.p50, 2)} | ${formatNumber(value.margin?.average, 2)} | ${formatNumber(value.margin?.p50, 2)} |`
+    ),
+    "",
+    "| Candidate Kind | count | pct |",
+    "| --- | ---: | ---: |",
+    ...Object.entries(geometry?.candidateKind || {}).map(
+      ([key, value]) =>
+        `| ${mdCell(key)} | ${value.count || 0} | ${formatPct(value.pct)} |`
+    ),
+    "",
+    "### Geometry Diagnostics",
+    "",
+    `- nonFiniteValueCount: ${formatNumber(diagnostics.nonFiniteValueCount)}`,
+    `- fairRangeViolationCount: ${formatNumber(diagnostics.fairRangeViolationCount)}`,
+    `- opportunityFairBattedBallMismatchCount: ${formatNumber(diagnostics.opportunityFairBattedBallMismatchCount)}`,
+    `- opportunityDirectionMismatchCount: ${formatNumber(diagnostics.opportunityDirectionMismatchCount)}`,
+    `- geometryRngCalls: ${formatNumber(diagnostics.geometryRngCalls)}`,
+    `- fallbackCount: ${formatNumber(diagnostics.fallbackCount)}`,
+    "",
+    "### Resolution Authority Map",
+    "",
+    "| Resolution | Authority |",
+    "| --- | --- |",
+    ...Object.entries(
+      geometry?.authority || RESOLUTION_AUTHORITY_CONFIG
+    ).map(
+      ([key, value]) => `| ${mdCell(key)} | ${mdCell(value)} |`
+    ),
+    "",
+    "### Geometry Shadow Definitions and Limitations",
+    "",
+    `- Coordinates: ${mdCell(definition.coordinates)}`,
+    `- Common clock: ${mdCell(definition.commonClock)}`,
+    `- Catch Probability distinction: ${mdCell(definition.catchProbabilityDistinction)}`,
+    `- Shadow model: ${mdCell(definition.model)}`,
+    `- Missing physics: ${mdCell(definition.missingPhysics)}`,
+    `- Unavailable defense: ${mdCell(definition.unavailableDefense)}`,
+    `- Outcome / defense authority: ${mdCell(definition.authority)}`,
+    `- Excluded inputs: ${mdCell(definition.excludedInputs)}`,
+    `- Baseball Savant CSV docs: ${mdCell(definition.csvDocsUrl)}`,
+    `- Statcast Catch Probability glossary: ${mdCell(definition.catchProbabilityUrl)}`,
   ];
 }
 
@@ -870,6 +987,7 @@ export function buildMeasurementMarkdown(options) {
     players, pitchers, gameDistribution, definitions, modelLimitations,
     validationPreset, validationPresetLabel, referenceBenchmark,
     referenceComparison, contactDisposition, pitchLocation, direction,
+    geometry,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -974,6 +1092,8 @@ export function buildMeasurementMarkdown(options) {
     "",
     ...directionShadowLines(direction, definitions),
     "",
+    ...geometryShadowLines(geometry, definitions),
+    "",
     "## EV/LA Batted Ball Profile",
     "",
     ...battedProfileTable(battedBallProfiles),
@@ -1075,6 +1195,11 @@ export function buildMeasurementMarkdown(options) {
     `- Direction vs Statcast Attack Direction: ${definitions.directionShadow.statcastDistinction}`,
     `- Direction authority: ${definitions.directionShadow.authority}`,
     `- Direction pitch-location inputs: ${definitions.directionShadow.pitchLocationInputs}`,
+    `- Geometry coordinates: ${definitions.geometryShadow.coordinates}`,
+    `- Geometry common clock: ${definitions.geometryShadow.commonClock}`,
+    `- Geometry vs Catch Probability: ${definitions.geometryShadow.catchProbabilityDistinction}`,
+    `- Geometry authority: ${definitions.geometryShadow.authority}`,
+    `- Geometry excluded inputs: ${definitions.geometryShadow.excludedInputs}`,
     `- AIR: ${definitions.battedBallClasses.AIR}`,
     "",
     "## AIへの確認依頼 / AI Review Request",

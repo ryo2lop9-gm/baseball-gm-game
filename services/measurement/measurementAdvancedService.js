@@ -395,7 +395,7 @@ function getCountKey(event) {
   return COUNT_KEYS.has(key) ? key : null;
 }
 
-function getEvBand(value) {
+export function getEvBand(value) {
   if (value < 70) return "<70";
   if (value < 80) return "70-79.9";
   if (value < 90) return "80-89.9";
@@ -405,7 +405,7 @@ function getEvBand(value) {
   return "105+";
 }
 
-function getLaBand(value) {
+export function getLaBand(value) {
   if (value < -10) return "<-10";
   if (value < 0) return "-10-0";
   if (value < 10) return "0-10";

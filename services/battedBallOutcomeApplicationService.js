@@ -1,4 +1,7 @@
 import { getPitchTypeLabel } from "../config/pitchConfig.js";
+import { FIELD_GEOMETRY_CONFIG } from "../config/fieldGeometryConfig.js";
+import { RESOLUTION_AUTHORITY_CONFIG } from "../config/resolutionAuthorityConfig.js";
+import { TRAJECTORY_MODEL_CONFIG } from "../config/trajectoryModelConfig.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 export const APPLICABLE_BATTED_BALL_OUTCOMES = Object.freeze([
@@ -87,6 +90,8 @@ export function applySelectedBattedBallOutcome({
     evLaKey
   );
   const directionShadow = battedBall?.directionShadow;
+  const geometryShadow = battedBall?.geometryShadow;
+  const geometryTrajectory = geometryShadow?.trajectory;
 
   // QoC remains an analysis/logging label and never selects the outcome.
   addQoCToBox(state, qoc);
@@ -145,6 +150,41 @@ export function applySelectedBattedBallOutcome({
       horizontalLocation: directionShadow?.horizontalLocation ?? null,
       verticalLocation: directionShadow?.verticalLocation ?? null,
       directionRngCalls: directionShadow?.directionRngCalls ?? 0,
+      geometryMode: geometryShadow?.mode || "off",
+      geometryModel:
+        geometryShadow?.model ?? FIELD_GEOMETRY_CONFIG.model,
+      geometryEventSchemaVersion:
+        geometryShadow?.geometryEventSchemaVersion ??
+        FIELD_GEOMETRY_CONFIG.geometryEventSchemaVersion,
+      geometrySource:
+        geometryShadow?.source ?? TRAJECTORY_MODEL_CONFIG.source,
+      coordinateSystem:
+        geometryShadow?.coordinateSystem ??
+        FIELD_GEOMETRY_CONFIG.coordinateSystem,
+      trajectoryClass: geometryShadow?.trajectoryClass ?? null,
+      trajectoryKind: geometryShadow?.trajectoryKind ?? null,
+      radialDistanceFt:
+        geometryTrajectory?.radialDistanceFt ?? null,
+      hangTimeSec: geometryTrajectory?.hangTimeSec ?? null,
+      landingX: geometryTrajectory?.landingPoint?.x ?? null,
+      landingY: geometryTrajectory?.landingPoint?.y ?? null,
+      firstGroundTimeSec:
+        geometryTrajectory?.firstGroundTimeSec ?? null,
+      firstGroundDistanceFt:
+        geometryTrajectory?.firstGroundDistanceFt ?? null,
+      stopTimeSec: geometryTrajectory?.stopTimeSec ?? null,
+      stopDistanceFt: geometryTrajectory?.stopDistanceFt ?? null,
+      stopX: geometryTrajectory?.stopPoint?.x ?? null,
+      stopY: geometryTrajectory?.stopPoint?.y ?? null,
+      fielderGeometryCandidates:
+        geometryShadow?.fielderCandidates ?? null,
+      geometryRngCalls: geometryShadow?.geometryRngCalls ?? 0,
+      geometryFallbackUsed: geometryShadow?.fallbackUsed ?? false,
+      parkId: geometryShadow?.parkId ?? FIELD_GEOMETRY_CONFIG.parkId,
+      wallIntersection: geometryShadow?.wallIntersection ?? null,
+      isOverFence: geometryShadow?.isOverFence ?? null,
+      resolutionAuthority:
+        geometryShadow?.authority ?? RESOLUTION_AUTHORITY_CONFIG,
       evLaKey,
       source,
       sampleQuality,

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Geometry Shadow Debugger</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #eaf2e3;
+      color: #17231a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    main {
+      margin: 0 auto;
+      max-width: 1180px;
+    }
+
+    h1, h2 { margin: 0; }
+    h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); }
+    h2 { font-size: 1.05rem; }
+
+    .lede {
+      color: #46604c;
+      margin: 8px 0 20px;
+    }
+
+    .layout {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(240px, 310px) minmax(0, 1fr);
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #bdd0ba;
+      border-radius: 14px;
+      box-shadow: 0 8px 28px rgba(38, 73, 43, 0.09);
+      padding: 18px;
+    }
+
+    label {
+      display: grid;
+      font-size: 0.86rem;
+      font-weight: 700;
+      gap: 5px;
+      margin-top: 14px;
+    }
+
+    input, button {
+      border: 1px solid #9bb29d;
+      border-radius: 8px;
+      font: inherit;
+      padding: 9px 10px;
+    }
+
+    button {
+      background: #225f35;
+      border-color: #225f35;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 750;
+      margin-top: 18px;
+      width: 100%;
+    }
+
+    button:hover { background: #174a28; }
+
+    .summary {
+      display: grid;
+      gap: 7px;
+      margin: 16px 0 0;
+    }
+
+    .summary-row {
+      display: grid;
+      font-size: 0.85rem;
+      gap: 8px;
+      grid-template-columns: 1fr 1.35fr;
+    }
+
+    .summary-row dt { color: #526c57; }
+    .summary-row dd { margin: 0; overflow-wrap: anywhere; }
+
+    .field-wrap {
+      aspect-ratio: 1.16;
+      background: #1e6d3b;
+      border: 1px solid #135028;
+      border-radius: 12px;
+      min-height: 430px;
+      overflow: hidden;
+    }
+
+    svg { display: block; height: 100%; width: 100%; }
+
+    .legend {
+      color: #4d6552;
+      display: flex;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .swatch {
+      border-radius: 999px;
+      display: inline-block;
+      height: 9px;
+      margin-right: 4px;
+      width: 9px;
+    }
+
+    .error {
+      color: #a12020;
+      font-size: 0.85rem;
+      min-height: 1.3em;
+      margin: 12px 0 0;
+    }
+
+    @media (max-width: 760px) {
+      body { padding: 14px; }
+      .layout { grid-template-columns: 1fr; }
+      .field-wrap { min-height: 340px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Geometry Shadow Debugger</h1>
+    <p class="lede">
+      暫定2D Geometry Shadowを可視化する独立開発ページです。試合結果や守備判定は表示しません。
+    </p>
+    <div class="layout">
+      <section class="card" aria-labelledby="inputs-heading">
+        <h2 id="inputs-heading">Inputs</h2>
+        <form id="geometry-form">
+          <label>
+            Exit velocity (mph)
+            <input id="exit-velocity" type="number" min="0" step="0.1" value="95" required />
+          </label>
+          <label>
+            Launch angle (°)
+            <input id="launch-angle" type="number" min="-90" max="90" step="0.1" value="25" required />
+          </label>
+          <label>
+            Spray angle (°)
+            <input id="spray-angle" type="number" min="-45" max="45" step="0.1" value="12" required />
+          </label>
+          <button type="submit">Render geometry</button>
+        </form>
+        <p id="error-output" class="error" role="alert"></p>
+        <dl id="geometry-summary" class="summary"></dl>
+      </section>
+      <section class="card" aria-labelledby="field-heading">
+        <h2 id="field-heading">Field view</h2>
+        <div class="field-wrap">
+          <svg id="field-svg" viewBox="-190 -335 380 365" role="img" aria-label="Geometry Shadow field visualization"></svg>
+        </div>
+        <div class="legend">
+          <span><i class="swatch" style="background:#f4d35e"></i>trajectory</span>
+          <span><i class="swatch" style="background:#fff"></i>fielder start</span>
+          <span><i class="swatch" style="background:#66c7ff"></i>candidate target</span>
+          <span><i class="swatch" style="background:#ff7657"></i>first ground / stop</span>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="./pages/geometryDebuggerPage.js"></script>
+</body>
+</html>

@@ -35,6 +35,7 @@ export function recordMeasurementHistogram(histogram, rawValue) {
 
 export function mergeMeasurementHistogram(target, source) {
   if (!target || !source) return target;
+  if (!source.count) return target;
   for (const [bin, count] of Object.entries(source.bins || {})) {
     target.bins[bin] = (target.bins[bin] || 0) + count;
   }

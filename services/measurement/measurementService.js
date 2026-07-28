@@ -4,6 +4,7 @@ import {
 } from "../../engine/core/engineCore.js";
 import { PITCH_LOCATION_CONFIG } from "../../config/pitchLocationConfig.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
+import { FIELD_GEOMETRY_CONFIG } from "../../config/fieldGeometryConfig.js";
 import { createInitialSimState } from "../../state/gameState.js";
 import {
   createSeededRandom,
@@ -28,10 +29,16 @@ import {
   mergeDirectionMeasurement,
   recordDirectionMeasurement,
 } from "./measurementDirectionService.js";
+import {
+  createGeometryMeasurementAccumulator,
+  finalizeGeometryMeasurement,
+  mergeGeometryMeasurement,
+  recordGeometryMeasurement,
+} from "./measurementGeometryService.js";
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
-export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 4;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 5;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -71,6 +78,9 @@ const STRUCTURAL_ERROR_CODES = new Set([
   "BATTED_BALL_OUTCOME_INVALID",
   "BATTED_BALL_DIRECTION_RANDOM_MISSING",
   "BATTED_BALL_DIRECTION_RANDOM_SHARED",
+  "BATTED_BALL_GEOMETRY_DIRECTION_REQUIRED",
+  "BATTED_BALL_GEOMETRY_INPUT_INVALID",
+  "BATTED_BALL_GEOMETRY_OUTPUT_INVALID",
   "EV_LA_LOOKUP_NOT_READY",
   "EV_LA_LOOKUP_INVALID",
   "EV_LA_LOOKUP_LOAD_FAILED",
@@ -164,10 +174,14 @@ export function createEmptyMeasurementAccumulator() {
     simulationErrors: [],
     advanced: createAdvancedMeasurementAccumulator(),
     direction: createDirectionMeasurementAccumulator(),
+    geometry: createGeometryMeasurementAccumulator(),
   };
 }
 
-export function createGameMeasurementAccumulator(directionMode = "shadow") {
+export function createGameMeasurementAccumulator(
+  directionMode = "shadow",
+  geometryMode = "shadow"
+) {
   return {
     qoc: {
       away: zeroMap(QOC_KEYS),
@@ -180,6 +194,10 @@ export function createGameMeasurementAccumulator(directionMode = "shadow") {
       directionMode === BATTED_BALL_DIRECTION_CONFIG.defaultMode
         ? null
         : createDirectionMeasurementAccumulator(),
+    geometry:
+      geometryMode === FIELD_GEOMETRY_CONFIG.defaultMode
+        ? null
+        : createGeometryMeasurementAccumulator(),
   };
 }
 
@@ -298,6 +316,9 @@ export function recordBattedBallMeasurement(gameAccumulator, event) {
 
   if (gameAccumulator.direction) {
     recordDirectionMeasurement(gameAccumulator.direction, event);
+  }
+  if (gameAccumulator.geometry) {
+    recordGeometryMeasurement(gameAccumulator.geometry, event);
   }
   recordAdvancedBattedBallMeasurement(gameAccumulator.advanced, event);
 
@@ -419,6 +440,12 @@ export function commitCompletedMeasurementGame(
     mergeDirectionMeasurement(
       accumulator.direction,
       gameAccumulator.direction
+    );
+  }
+  if (gameAccumulator.geometry) {
+    mergeGeometryMeasurement(
+      accumulator.geometry,
+      gameAccumulator.geometry
     );
   }
 }
@@ -606,6 +633,13 @@ export function finalizeMeasurementSummary(accumulator, run) {
     mode: directionMode,
     directionSeed: run.directionSeed ?? null,
   });
+  const geometryMode =
+    run.geometryMode || FIELD_GEOMETRY_CONFIG.defaultMode;
+  const geometry = finalizeGeometryMeasurement(accumulator.geometry, {
+    fairBattedBalls,
+    directionOpportunities: direction.opportunities,
+    mode: geometryMode,
+  });
 
   return {
     reportSchemaVersion: MEASUREMENT_SUMMARY_SCHEMA_VERSION,
@@ -614,6 +648,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
       seed: normalizeSeed(run.seed),
       directionMode,
       directionSeed: direction.directionSeed,
+      geometryMode,
       requestedGames: run.requestedGames,
       completedGames: accumulator.completedGames,
       failedGames: accumulator.failedGames,
@@ -630,6 +665,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
     plateDiscipline: advanced.plateDiscipline,
     pitchLocation: advanced.pitchLocation,
     direction,
+    geometry,
     contactDisposition,
     referenceBenchmark,
     referenceComparison,
@@ -683,6 +719,22 @@ export async function runMeasurementBatches({
     error.context = { directionMode };
     throw error;
   }
+  const geometryMode =
+    runtime.geometryMode ?? FIELD_GEOMETRY_CONFIG.shadowMode;
+  if (geometryMode !== "off" && geometryMode !== "shadow") {
+    const error = new Error("Measurement Geometry mode is invalid.");
+    error.code = "BATTED_BALL_GEOMETRY_INPUT_INVALID";
+    error.context = { geometryMode };
+    throw error;
+  }
+  if (geometryMode === "shadow" && directionMode !== "shadow") {
+    const error = new Error(
+      "Geometry Shadow requires Direction Shadow."
+    );
+    error.code = "BATTED_BALL_GEOMETRY_DIRECTION_REQUIRED";
+    error.context = { geometryMode, directionMode };
+    throw error;
+  }
   const directionSeed = normalizeSeed(
     runtime.directionSeed ??
       deriveNamespacedSeed(normalizedSeed, BATTED_BALL_DIRECTION_CONFIG.model)
@@ -720,7 +772,10 @@ export async function runMeasurementBatches({
 
     while (accumulator.completedGames + accumulator.failedGames < batchEnd) {
       const gameIndex = accumulator.completedGames + accumulator.failedGames + 1;
-      const gameAccumulator = createGameMeasurementAccumulator(directionMode);
+      const gameAccumulator = createGameMeasurementAccumulator(
+        directionMode,
+        geometryMode
+      );
 
       try {
         const state = createGameState(awayTeam, homeTeam);
@@ -729,6 +784,7 @@ export async function runMeasurementBatches({
           directionMode,
           directionRandom,
           gameKey: `seed:${normalizedSeed}:game:${gameIndex}`,
+          geometryMode,
           onPitchMeasurement: (event) =>
             recordPitchMeasurementEvent(gameAccumulator, event),
           onBattedBallMeasurement: (event) =>
@@ -747,6 +803,7 @@ export async function runMeasurementBatches({
             seed: normalizedSeed,
             directionMode,
             directionSeed,
+            geometryMode,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -763,6 +820,7 @@ export async function runMeasurementBatches({
             seed: normalizedSeed,
             directionMode,
             directionSeed,
+            geometryMode,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -792,6 +850,7 @@ export async function runMeasurementBatches({
     seed: normalizedSeed,
     directionMode,
     directionSeed,
+    geometryMode,
     requestedGames,
     elapsedMs: now() - startedAt,
   });

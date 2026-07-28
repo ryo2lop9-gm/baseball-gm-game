@@ -124,6 +124,9 @@ export function createFastSimulationOptions(runtime = {}) {
   if (typeof runtime.gameKey === "string" && runtime.gameKey.length > 0) {
     options.gameKey = runtime.gameKey;
   }
+  if (runtime.geometryMode === "off" || runtime.geometryMode === "shadow") {
+    options.geometryMode = runtime.geometryMode;
+  }
 
   return options;
 }

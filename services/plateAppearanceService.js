@@ -1,5 +1,6 @@
 import { generateFairBattedBall } from "./evLaContactService.js";
 import { generateDirectionShadow } from "./battedBallDirectionService.js";
+import { generateGeometryShadow } from "./defense/battedBallGeometryService.js";
 import { recordVelocityBandPlateAppearance } from "./velocityBandStatsService.js";
 
 function clamp(value, min, max) {
@@ -500,12 +501,24 @@ export function resolvePlateAppearanceResult({
     typeof options?.gameKey === "string" && options.gameKey.length > 0
       ? options.gameKey
       : "game";
-  const battedBallWithDirection = {
+  const battedBallEventId = Number.isInteger(state?.pitchSequence)
+    ? `${gameKey}:pitch:${state.pitchSequence}`
+    : null;
+  const geometryShadow =
+    options?.geometryMode === undefined || options.geometryMode === "off"
+      ? null
+      : generateGeometryShadow({
+          mode: options.geometryMode,
+          battedBallEventId,
+          exitVelocity: battedBall.exitVelocity,
+          launchAngle: battedBall.launchAngle,
+          directionShadow,
+        });
+  const battedBallWithDirectionAndGeometry = {
     ...battedBall,
-    battedBallEventId: Number.isInteger(state?.pitchSequence)
-      ? `${gameKey}:pitch:${state.pitchSequence}`
-      : null,
+    battedBallEventId,
     directionShadow,
+    geometryShadow,
   };
 
   const contactResult = resolveBattedBallResult(
@@ -515,7 +528,7 @@ export function resolvePlateAppearanceResult({
     pitchType,
     battedBall.qoc,
     options,
-    battedBallWithDirection
+    battedBallWithDirectionAndGeometry
   );
 
   return {

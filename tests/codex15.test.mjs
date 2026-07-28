@@ -269,7 +269,9 @@ function normalizeLegacySummary(summary) {
   normalized.run.gamesPerSecond = 0;
   delete normalized.run.directionMode;
   delete normalized.run.directionSeed;
+  delete normalized.run.geometryMode;
   delete normalized.direction;
+  delete normalized.geometry;
   for (const side of ["away", "home"]) {
     for (const player of normalized.players[side]) {
       player.key = "<player-key>";
@@ -840,16 +842,16 @@ test("Direction summary retains aggregates but no raw event collection or rolls"
   );
 });
 
-test("Summary and Report schemas are version four", () => {
+test("Summary and Report schemas are version five", () => {
   const report = buildMeasurementReportObject({
     summary: measurementSummary,
     teams: compatibilityTeams,
     generatedAt: "2026-07-28T00:00:00.000Z",
   });
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 4);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 4);
-  assert.equal(measurementSummary.reportSchemaVersion, 4);
-  assert.equal(report.reportSchemaVersion, 4);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 5);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 5);
+  assert.equal(measurementSummary.reportSchemaVersion, 5);
+  assert.equal(report.reportSchemaVersion, 5);
   assert.equal(report.direction.model, "gm_basic_direction_shadow_v1");
 });
 
