@@ -41,6 +41,12 @@ import {
   recordGeometryMeasurement,
 } from "./measurementGeometryService.js";
 import {
+  createFenceGeometryMeasurementAccumulator,
+  finalizeFenceGeometryMeasurement,
+  mergeFenceGeometryMeasurement,
+  recordFenceGeometryMeasurement,
+} from "./measurementFenceGeometryService.js";
+import {
   createDefenseMeasurementAccumulator,
   finalizeDefenseMeasurement,
   mergeDefenseMeasurement,
@@ -55,7 +61,7 @@ import {
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
-export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 7;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 8;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -98,6 +104,8 @@ const STRUCTURAL_ERROR_CODES = new Set([
   "BATTED_BALL_GEOMETRY_DIRECTION_REQUIRED",
   "BATTED_BALL_GEOMETRY_INPUT_INVALID",
   "BATTED_BALL_GEOMETRY_OUTPUT_INVALID",
+  "BATTED_BALL_AIR_PATH_INPUT_INVALID",
+  "BATTED_BALL_FENCE_GEOMETRY_INPUT_INVALID",
   "BATTED_BALL_DEFENSE_GEOMETRY_REQUIRED",
   "BATTED_BALL_DEFENSE_ACTIVE_DEFENSE_REQUIRED",
   "BATTED_BALL_DEFENSE_SEED_REQUIRED",
@@ -200,6 +208,7 @@ export function createEmptyMeasurementAccumulator() {
     advanced: createAdvancedMeasurementAccumulator(),
     direction: createDirectionMeasurementAccumulator(),
     geometry: createGeometryMeasurementAccumulator(),
+    fenceGeometry: createFenceGeometryMeasurementAccumulator(),
     defense: createDefenseMeasurementAccumulator(),
     defenseCalibration: createDefenseCalibrationAccumulator(),
   };
@@ -227,6 +236,10 @@ export function createGameMeasurementAccumulator(
       geometryMode === FIELD_GEOMETRY_CONFIG.defaultMode
         ? null
         : createGeometryMeasurementAccumulator(),
+    fenceGeometry:
+      geometryMode === FIELD_GEOMETRY_CONFIG.defaultMode
+        ? null
+        : createFenceGeometryMeasurementAccumulator(),
     defense:
       defenseMode === BATTED_BALL_DEFENSE_CONFIG.defaultMode
         ? null
@@ -356,6 +369,12 @@ export function recordBattedBallMeasurement(gameAccumulator, event) {
   }
   if (gameAccumulator.geometry) {
     recordGeometryMeasurement(gameAccumulator.geometry, event);
+  }
+  if (gameAccumulator.fenceGeometry) {
+    recordFenceGeometryMeasurement(
+      gameAccumulator.fenceGeometry,
+      event
+    );
   }
   if (gameAccumulator.defense) {
     recordDefenseMeasurement(gameAccumulator.defense, event);
@@ -492,6 +511,12 @@ export function commitCompletedMeasurementGame(
     mergeGeometryMeasurement(
       accumulator.geometry,
       gameAccumulator.geometry
+    );
+  }
+  if (gameAccumulator.fenceGeometry) {
+    mergeFenceGeometryMeasurement(
+      accumulator.fenceGeometry,
+      gameAccumulator.fenceGeometry
     );
   }
   if (gameAccumulator.defense) {
@@ -698,6 +723,10 @@ export function finalizeMeasurementSummary(accumulator, run) {
     directionOpportunities: direction.opportunities,
     mode: geometryMode,
   });
+  const fenceGeometry = finalizeFenceGeometryMeasurement(
+    accumulator.fenceGeometry,
+    { mode: geometryMode }
+  );
   const defenseMode =
     run.defenseMode || BATTED_BALL_DEFENSE_CONFIG.defaultMode;
   const defense = finalizeDefenseMeasurement(accumulator.defense, {
@@ -740,6 +769,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
     pitchLocation: advanced.pitchLocation,
     direction,
     geometry,
+    fenceGeometry,
     defense,
     defenseCalibration,
     contactDisposition,

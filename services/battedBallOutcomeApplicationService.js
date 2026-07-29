@@ -183,6 +183,12 @@ export function applySelectedBattedBallOutcome({
       geometryRngCalls: geometryShadow?.geometryRngCalls ?? 0,
       geometryFallbackUsed: geometryShadow?.fallbackUsed ?? false,
       parkId: geometryShadow?.parkId ?? FIELD_GEOMETRY_CONFIG.parkId,
+      airPathModel: geometryShadow?.airPathModel ?? null,
+      fenceModel: geometryShadow?.fenceModel ?? null,
+      fenceSource: geometryShadow?.fenceSource ?? null,
+      airPath: geometryShadow?.airPath ?? null,
+      fence: geometryShadow?.fence ?? null,
+      wallContext: geometryShadow?.wallContext ?? null,
       wallIntersection: geometryShadow?.wallIntersection ?? null,
       isOverFence: geometryShadow?.isOverFence ?? null,
       resolutionAuthority:

@@ -90,6 +90,7 @@ function normalizeSummaryForCompatibility(summary) {
   delete normalized.geometry;
   delete normalized.defense;
   delete normalized.defenseCalibration;
+  delete normalized.fenceGeometry;
   const removeSpeed = (value) => {
     if (!value || typeof value !== "object") return;
     if (value.ratings && typeof value.ratings === "object") {
@@ -629,16 +630,16 @@ test("Pitch Location aggregation, 25 cells, and diagnostics do not regress", () 
   );
 });
 
-test("Summary and Report schema versions are seven", () => {
+test("Summary and Report schema versions are eight", () => {
   const report = buildMeasurementReportObject({
     summary: measurementSummary,
     teams: compatibilityTeams,
     generatedAt: "2026-07-28T00:00:00.000Z",
   });
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
-  assert.equal(measurementSummary.reportSchemaVersion, 7);
-  assert.equal(report.reportSchemaVersion, 7);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 8);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 8);
+  assert.equal(measurementSummary.reportSchemaVersion, 8);
+  assert.equal(report.reportSchemaVersion, 8);
 });
 
 test("facade composes selection then application without defense overrides", async () => {

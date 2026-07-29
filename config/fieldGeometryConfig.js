@@ -13,7 +13,7 @@ export const FIELD_GEOMETRY_CONFIG = Object.freeze({
   defaultMode: "off",
   shadowMode: "shadow",
   model: "provisional_ev_la_geometry_shadow_v1",
-  geometryEventSchemaVersion: 1,
+  geometryEventSchemaVersion: 2,
   coordinateSystem: "home_plate_xy_feet_v1",
   units: Object.freeze({
     distance: "feet",

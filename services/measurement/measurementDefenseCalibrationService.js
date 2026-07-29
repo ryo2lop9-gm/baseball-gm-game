@@ -900,6 +900,7 @@ export function finalizeDefenseCalibrationMeasurement(
       sensitivityMonotonic,
       legacyComparisonAvailable,
       alignmentComparisonAvailable: false,
+      wallGeometryAvailable: true,
       wallModelAvailable: false,
       linerCatchModelAvailable: false,
       authoritySwitchReady: false,

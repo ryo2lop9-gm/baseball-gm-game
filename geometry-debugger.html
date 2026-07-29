@@ -63,6 +63,8 @@
       padding: 9px 10px;
     }
 
+    input[type="range"] { padding: 0; }
+
     button {
       background: #225f35;
       border-color: #225f35;
@@ -114,6 +116,26 @@
       border-radius: 12px;
       min-height: 430px;
       overflow: hidden;
+    }
+
+    .visual-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .side-wrap {
+      aspect-ratio: 2.15;
+      background: #eef6ea;
+      border: 1px solid #bdd0ba;
+      border-radius: 12px;
+      min-height: 220px;
+      overflow: hidden;
+    }
+
+    .slider-value {
+      color: #526c57;
+      font-size: 0.8rem;
+      font-weight: 600;
     }
 
     svg { display: block; height: 100%; width: 100%; }
@@ -183,6 +205,11 @@
             Defense seed
             <input id="defense-seed" type="number" min="0" max="4294967295" step="1" value="123456789" required />
           </label>
+          <label>
+            Air trajectory time
+            <input id="trajectory-time" type="range" min="0" max="1" step="0.01" value="0" />
+            <output id="trajectory-time-output" class="slider-value">0.00 sec</output>
+          </label>
           <button type="submit">Render Geometry + Defense</button>
         </form>
         <p id="error-output" class="error" role="alert"></p>
@@ -195,12 +222,19 @@
         </table>
       </section>
       <section class="card" aria-labelledby="field-heading">
-        <h2 id="field-heading">Field view</h2>
-        <div class="field-wrap">
-          <svg id="field-svg" viewBox="-190 -335 380 365" role="img" aria-label="Geometry Shadow field visualization"></svg>
+        <h2 id="field-heading">Neutral Fence / Air Path views</h2>
+        <div class="visual-stack">
+          <div class="field-wrap">
+            <svg id="field-svg" viewBox="-190 -335 380 365" role="img" aria-label="Geometry Shadow top view with Neutral Fence"></svg>
+          </div>
+          <div class="side-wrap">
+            <svg id="side-svg" viewBox="-12 -130 440 150" role="img" aria-label="Air trajectory side view"></svg>
+          </div>
         </div>
         <div class="legend">
           <span><i class="swatch" style="background:#f4d35e"></i>trajectory</span>
+          <span><i class="swatch" style="background:#ffb347"></i>Neutral Fence</span>
+          <span><i class="swatch" style="background:#c44dff"></i>apex / current time</span>
           <span><i class="swatch" style="background:#fff"></i>fielder start</span>
           <span><i class="swatch" style="background:#66c7ff"></i>candidate target</span>
           <span><i class="swatch" style="background:#ff7657"></i>first ground / stop</span>
@@ -208,6 +242,6 @@
       </section>
     </div>
   </main>
-  <script type="module" src="./pages/geometryDebuggerPage.js"></script>
+  <script type="module" src="./pages/geometryDebuggerPage.js?v=codex19"></script>
 </body>
 </html>

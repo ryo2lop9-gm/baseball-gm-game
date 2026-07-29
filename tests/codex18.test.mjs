@@ -720,11 +720,11 @@ test("35 Authority Readiness Gate remains closed", () => {
   assert.ok(gate.blockers.includes("legacy_authority_retained"));
 });
 
-test("36 Summary and Report schema are v7", () => {
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
-  assert.equal(diagnosticRun.summary.reportSchemaVersion, 7);
-  assert.equal(diagnosticReport.reportSchemaVersion, 7);
+test("36 Summary and Report schema are v8", () => {
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 8);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 8);
+  assert.equal(diagnosticRun.summary.reportSchemaVersion, 8);
+  assert.equal(diagnosticReport.reportSchemaVersion, 8);
 });
 
 test("37 every schema v6 top-level field remains present", () => {

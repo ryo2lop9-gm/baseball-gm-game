@@ -2,13 +2,17 @@ import { SMOOTHING_CONFIG } from "../evLaOutcomeService.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
 import { DEFENSE_CALIBRATION_CONFIG } from "../../config/defenseCalibrationConfig.js";
 import { BATTED_BALL_DEFENSE_CONFIG } from "../../config/defenseProbabilityConfig.js";
+import {
+  AIR_TRAJECTORY_PATH_CONFIG,
+  NEUTRAL_FENCE_CONFIG,
+} from "../../config/neutralFenceConfig.js";
 import { RESOLUTION_AUTHORITY_CONFIG } from "../../config/resolutionAuthorityConfig.js";
 import {
   buildMeasurementReferenceComparison,
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
 
-export const MEASUREMENT_REPORT_SCHEMA_VERSION = 7;
+export const MEASUREMENT_REPORT_SCHEMA_VERSION = 8;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
@@ -277,6 +281,28 @@ export function getMeasurementDefinitions() {
       catchProbabilityUrl:
         "https://www.mlb.com/glossary/statcast/catch-probability",
     },
+    fenceGeometry: {
+      model:
+        `${AIR_TRAJECTORY_PATH_CONFIG.model} analytically derives a provisional three-dimensional air path that exactly preserves the existing carry, hang time, and landing point.`,
+      effectiveGravity:
+        "effectiveGravityFtPerSec2 is a provisional coefficient fitted to the existing carry and hang time; it is not a measured physical gravity or aerodynamic model.",
+      fence:
+        `${NEUTRAL_FENCE_CONFIG.model} uses a symmetric provisional Neutral Fence profile from ${NEUTRAL_FENCE_CONFIG.source}; it is neither an MLB average nor measured park geometry.`,
+      missingEnvironment:
+        "Air resistance, spin, wind, temperature, altitude, side-wall and foul-pole shapes, spectator areas, and park-specific profiles are not implemented.",
+      missingWallPlay:
+        "Wall bounce, carom, robbery, and jump behavior are not implemented.",
+      missingLinerCatch:
+        "En-route liner catches are not implemented.",
+      defenseBoundary:
+        "Fence and Air Path fields are diagnostic only and are not inputs to Defense probabilities, Responsible Fielder selection, or Shadow rolls.",
+      legacyBoundary:
+        "Fence and Air Path fields do not change legacy outcomes or home-run authority.",
+      commonClock:
+        "Batted-ball contact is t = 0.",
+      authority:
+        "Resolution Authority remains legacy; the Neutral Fence and Air Path are Geometry Shadow diagnostics only.",
+    },
     defenseShadow: {
       eligibility:
         "Simple Catch Defense Shadow is limited to Geometry fly and popup events; ground, low_liner, and air_liner defense is not implemented.",
@@ -408,6 +434,7 @@ export function buildMeasurementReportObject({
     pitchLocation: summary?.pitchLocation || {},
     direction: summary?.direction || {},
     geometry: summary?.geometry || {},
+    fenceGeometry: summary?.fenceGeometry || {},
     defense: summary?.defense || {},
     defenseCalibration: summary?.defenseCalibration || {},
     batting: results,
@@ -694,6 +721,260 @@ function defenseOaaTable(title, breakdown) {
     ...Object.entries(breakdown || {}).map(([key, value]) =>
       `| ${mdCell(key)} | ${value.evaluations || 0} | ${formatNumber(value.simCatchOAASum, 3)} | ${formatNumber(value.simCatchOAAAverage, 4)} |`
     ),
+  ];
+}
+
+function fenceBreakdownLines(title, breakdown) {
+  return [
+    `### ${title}`,
+    "",
+    "| Group | evaluations | air | ground | none | near wall | wall contact | over fence |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(breakdown || {}).map(
+      ([key, line]) =>
+        `| ${mdCell(key)} | ${formatNumber(
+          line.evaluations
+        )} | ${formatNumber(line.air)} | ${formatNumber(
+          line.ground
+        )} | ${formatNumber(
+          line.wallContext?.none?.count
+        )} | ${formatNumber(
+          line.wallContext?.near_wall_inside?.count
+        )} | ${formatNumber(
+          line.wallContext?.wall_contact?.count
+        )} | ${formatNumber(
+          line.wallContext?.over_fence?.count
+        )} |`
+    ),
+  ];
+}
+
+function fenceGeometryLines(fenceGeometry, definitions, run) {
+  const definition = definitions?.fenceGeometry || {};
+  const metrics = fenceGeometry?.metrics || {};
+  const diagnostics = fenceGeometry?.diagnostics || {};
+  const performance = fenceGeometry?.performance || {};
+  const inconsistencies =
+    fenceGeometry?.inconsistencies || {};
+  return [
+    "## Air Trajectory and Fence Geometry Shadow",
+    "",
+    `- mode: ${mdCell(fenceGeometry?.mode)}`,
+    `- airPathModel: ${mdCell(
+      fenceGeometry?.airPathModel
+    )}`,
+    `- fenceModel: ${mdCell(fenceGeometry?.fenceModel)}`,
+    `- fenceSource: ${mdCell(fenceGeometry?.fenceSource)}`,
+    `- parkId: ${mdCell(fenceGeometry?.parkId)}`,
+    `- geometryEventSchemaVersion: ${formatNumber(
+      fenceGeometry?.geometryEventSchemaVersion
+    )}`,
+    `- evaluations: ${formatNumber(
+      fenceGeometry?.evaluations
+    )}`,
+    `- airEvaluations: ${formatNumber(
+      fenceGeometry?.airEvaluations
+    )}`,
+    `- groundEvaluations: ${formatNumber(
+      fenceGeometry?.groundEvaluations
+    )}`,
+    `- validEvents: ${formatNumber(
+      fenceGeometry?.validEvents
+    )}`,
+    `- invalidEvents: ${formatNumber(
+      fenceGeometry?.invalidEvents
+    )}`,
+    "",
+    "| wallContext | count | pct of air |",
+    "| --- | ---: | ---: |",
+    ...Object.entries(fenceGeometry?.wallContext || {}).map(
+      ([key, line]) =>
+        `| ${mdCell(key)} | ${formatNumber(
+          line.count
+        )} | ${formatPct(line.pct)} |`
+    ),
+    "",
+    ...fenceBreakdownLines(
+      "Trajectory Class",
+      fenceGeometry?.breakdowns?.trajectoryClass
+    ),
+    "",
+    ...fenceBreakdownLines(
+      "Field Sector",
+      fenceGeometry?.breakdowns?.fieldSector
+    ),
+    "",
+    ...fenceBreakdownLines(
+      "EV Band",
+      fenceGeometry?.breakdowns?.evBand
+    ),
+    "",
+    ...fenceBreakdownLines(
+      "LA Band",
+      fenceGeometry?.breakdowns?.laBand
+    ),
+    "",
+    "| Air / Fence Metric | count | mean | min | p10 | p25 | p50 | p75 | p90 | max |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    geometryHistogramLine(
+      "fenceDistanceFt",
+      metrics.fenceDistance
+    ),
+    geometryHistogramLine(
+      "landingDistanceToFenceFt",
+      metrics.landingDistanceToFence
+    ),
+    geometryHistogramLine(
+      "fenceTimeSec",
+      metrics.fenceTime
+    ),
+    geometryHistogramLine(
+      "heightAtFenceFt",
+      metrics.heightAtFence
+    ),
+    geometryHistogramLine(
+      "clearanceFt",
+      metrics.clearance
+    ),
+    geometryHistogramLine(
+      "apexTimeSec",
+      metrics.apexTime
+    ),
+    geometryHistogramLine(
+      "apexHeightFt",
+      metrics.apexHeight
+    ),
+    geometryHistogramLine(
+      "apexRadialDistanceFt",
+      metrics.apexDistance
+    ),
+    "",
+    "### Legacy Outcome by wallContext",
+    "",
+    "| Legacy outcome | count | none | near wall | wall contact | over fence |",
+    "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(fenceGeometry?.legacyOutcome || {}).map(
+      ([key, line]) =>
+        `| ${mdCell(key)} | ${formatNumber(
+          line.count
+        )} | ${formatNumber(
+          line.wallContext?.none?.count
+        )} | ${formatNumber(
+          line.wallContext?.near_wall_inside?.count
+        )} | ${formatNumber(
+          line.wallContext?.wall_contact?.count
+        )} | ${formatNumber(
+          line.wallContext?.over_fence?.count
+        )} |`
+    ),
+    "",
+    "### Defense Shadow by wallContext",
+    "",
+    "| wallContext | eligible | caught | not caught |",
+    "| --- | ---: | ---: | ---: |",
+    ...Object.entries(
+      fenceGeometry?.defenseByWallContext || {}
+    ).map(
+      ([key, line]) =>
+        `| ${mdCell(key)} | ${formatNumber(
+          line.eligible
+        )} | ${formatNumber(line.caught)} | ${formatNumber(
+          line.notCaught
+        )} |`
+    ),
+    "",
+    "### Known Wall / Authority Contradictions",
+    "",
+    `- overFenceShadowCaught: ${formatNumber(
+      inconsistencies.overFenceShadowCaught
+    )}`,
+    `- overFenceLegacyOut: ${formatNumber(
+      inconsistencies.overFenceLegacyOut
+    )}`,
+    `- overFenceLegacyOutcome: ${mdCell(
+      JSON.stringify(
+        inconsistencies.overFenceLegacyOutcome || {}
+      )
+    )}`,
+    `- responsibleTargetOutsideFence: ${formatNumber(
+      inconsistencies.responsibleTargetOutsideFence
+    )}`,
+    `- candidateTargetsOutsideFence: ${formatNumber(
+      inconsistencies.candidateTargetsOutsideFence
+    )} / ${formatNumber(
+      inconsistencies.candidateTargetChecks
+    )}`,
+    "",
+    "### Fence Diagnostics and Performance",
+    "",
+    `- elapsedMs: ${formatNumber(run?.elapsedMs, 2)}`,
+    `- geometryRngCalls: ${formatNumber(
+      diagnostics.geometryRngCalls
+    )}`,
+    `- fallbackCount: ${formatNumber(
+      diagnostics.fallbackCount
+    )}`,
+    `- nonFiniteValueCount: ${formatNumber(
+      diagnostics.nonFiniteValueCount
+    )}`,
+    `- endpointIdentityChecks / violations: ${formatNumber(
+      diagnostics.endpointIdentityChecks
+    )} / ${formatNumber(
+      diagnostics.endpointIdentityViolationCount
+    )}`,
+    `- symmetryChecks / violations: ${formatNumber(
+      diagnostics.symmetryChecks
+    )} / ${formatNumber(
+      diagnostics.symmetryViolationCount
+    )}`,
+    `- rawEventsStored: ${Boolean(
+      performance.rawEventsStored
+    )}`,
+    `- rawTrajectoryArraysStored: ${Boolean(
+      performance.rawTrajectoryArraysStored
+    )}`,
+    `- timeTickScans: ${formatNumber(
+      performance.timeTickScans
+    )}`,
+    `- monteCarloEvaluations: ${formatNumber(
+      performance.monteCarloEvaluations
+    )}`,
+    "",
+    "### Fence Geometry Resolution Authority Map",
+    "",
+    "| Resolution | Authority |",
+    "| --- | --- |",
+    ...Object.entries(
+      fenceGeometry?.authority || RESOLUTION_AUTHORITY_CONFIG
+    ).map(
+      ([key, value]) =>
+        `| ${mdCell(key)} | ${mdCell(value)} |`
+    ),
+    "",
+    "### Air Path / Neutral Fence Definitions and Limitations",
+    "",
+    `- Provisional analytic path: ${mdCell(definition.model)}`,
+    `- effectiveGravity: ${mdCell(
+      definition.effectiveGravity
+    )}`,
+    `- Neutral Fence: ${mdCell(definition.fence)}`,
+    `- Missing environment: ${mdCell(
+      definition.missingEnvironment
+    )}`,
+    `- Missing wall play: ${mdCell(
+      definition.missingWallPlay
+    )}`,
+    `- Missing liner catch: ${mdCell(
+      definition.missingLinerCatch
+    )}`,
+    `- Defense boundary: ${mdCell(
+      definition.defenseBoundary
+    )}`,
+    `- Legacy boundary: ${mdCell(
+      definition.legacyBoundary
+    )}`,
+    `- Common clock: ${mdCell(definition.commonClock)}`,
+    `- Authority: ${mdCell(definition.authority)}`,
   ];
 }
 
@@ -1407,7 +1688,7 @@ export function buildMeasurementMarkdown(options) {
     players, pitchers, gameDistribution, definitions, modelLimitations,
     validationPreset, validationPresetLabel, referenceBenchmark,
     referenceComparison, contactDisposition, pitchLocation, direction,
-    geometry, defense, defenseCalibration,
+    geometry, fenceGeometry, defense, defenseCalibration,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -1513,6 +1794,8 @@ export function buildMeasurementMarkdown(options) {
     ...directionShadowLines(direction, definitions),
     "",
     ...geometryShadowLines(geometry, definitions),
+    "",
+    ...fenceGeometryLines(fenceGeometry, definitions, run),
     "",
     ...defenseShadowLines(defense, definitions, run),
     "",
@@ -1628,6 +1911,14 @@ export function buildMeasurementMarkdown(options) {
     `- Geometry vs Catch Probability: ${definitions.geometryShadow.catchProbabilityDistinction}`,
     `- Geometry authority: ${definitions.geometryShadow.authority}`,
     `- Geometry excluded inputs: ${definitions.geometryShadow.excludedInputs}`,
+    `- Air Path: ${definitions.fenceGeometry.model}`,
+    `- effectiveGravity: ${definitions.fenceGeometry.effectiveGravity}`,
+    `- Neutral Fence: ${definitions.fenceGeometry.fence}`,
+    `- Fence environment limits: ${definitions.fenceGeometry.missingEnvironment}`,
+    `- Fence play limits: ${definitions.fenceGeometry.missingWallPlay}`,
+    `- Fence Defense boundary: ${definitions.fenceGeometry.defenseBoundary}`,
+    `- Fence legacy boundary: ${definitions.fenceGeometry.legacyBoundary}`,
+    `- Fence Authority: ${definitions.fenceGeometry.authority}`,
     `- Defense eligibility: ${definitions.defenseShadow.eligibility}`,
     `- Defense model: ${definitions.defenseShadow.model}`,
     `- Defense authority: ${definitions.defenseShadow.authority}`,

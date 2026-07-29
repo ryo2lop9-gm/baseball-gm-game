@@ -658,11 +658,11 @@ test("Geometry aggregation retains no raw events or raw value arrays", () => {
   assert.equal("events" in measurementSummary.geometry, false);
 });
 
-test("Summary and Report use schema v7", () => {
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
-  assert.equal(measurementSummary.reportSchemaVersion, 7);
-  assert.equal(measurementReport.reportSchemaVersion, 7);
+test("Summary and Report use schema v8", () => {
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 8);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 8);
+  assert.equal(measurementSummary.reportSchemaVersion, 8);
+  assert.equal(measurementReport.reportSchemaVersion, 8);
   assert.equal(
     measurementReport.geometry.model,
     "provisional_ev_la_geometry_shadow_v1"

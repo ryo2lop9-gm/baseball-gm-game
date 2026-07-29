@@ -2,9 +2,15 @@ import {
   FIELD_GEOMETRY_CONFIG,
   FIELD_GEOMETRY_MODES,
 } from "../../config/fieldGeometryConfig.js";
+import {
+  AIR_TRAJECTORY_PATH_CONFIG,
+  NEUTRAL_FENCE_CONFIG,
+} from "../../config/neutralFenceConfig.js";
 import { RESOLUTION_AUTHORITY_CONFIG } from "../../config/resolutionAuthorityConfig.js";
 import { TRAJECTORY_MODEL_CONFIG } from "../../config/trajectoryModelConfig.js";
 import { getMeasurementClass } from "../measurement/measurementClassService.js";
+import { buildAirPathSummary } from "./airTrajectoryPathService.js";
+import { evaluateFenceGeometry } from "./fenceGeometryService.js";
 
 const EPSILON = 1e-9;
 
@@ -125,9 +131,42 @@ function assertGeometryOutput(result) {
     if (
       !Number.isFinite(trajectory.carryScale) ||
       !Number.isFinite(trajectory.hangTimeScale) ||
-      !Number.isFinite(trajectory.hangTimeSec)
+      !Number.isFinite(trajectory.hangTimeSec) ||
+      !result.airPath ||
+      !Number.isFinite(
+        result.airPath.effectiveGravityFtPerSec2
+      ) ||
+      !Number.isFinite(result.airPath.radialSpeedFtPerSec) ||
+      !Number.isFinite(result.airPath.apexTimeSec) ||
+      !Number.isFinite(result.airPath.apexHeightFt) ||
+      !Number.isFinite(result.airPath.apexRadialDistanceFt) ||
+      !Number.isFinite(result.airPath.apexPoint?.x) ||
+      !Number.isFinite(result.airPath.apexPoint?.y) ||
+      !Number.isFinite(result.airPath.apexPoint?.z) ||
+      !result.fence ||
+      !Number.isFinite(result.fence.fenceDistanceFt) ||
+      !Number.isFinite(result.fence.wallHeightFt) ||
+      !Number.isFinite(
+        result.fence.landingDistanceToFenceFt
+      ) ||
+      !Number.isFinite(result.fence.nearWallDistanceFt) ||
+      typeof result.isOverFence !== "boolean"
     ) {
       throwInvalidGeometryOutput("geometry.trajectory.air");
+    }
+    if (
+      result.wallIntersection &&
+      [
+        result.wallIntersection.timeSec,
+        result.wallIntersection.x,
+        result.wallIntersection.y,
+        result.wallIntersection.z,
+        result.wallIntersection.radialDistanceFt,
+        result.wallIntersection.wallHeightFt,
+        result.wallIntersection.clearanceFt,
+      ].some((value) => !Number.isFinite(value))
+    ) {
+      throwInvalidGeometryOutput("geometry.wallIntersection");
     }
   } else if (
     !Number.isFinite(trajectory.firstGroundPoint.x) ||
@@ -600,6 +639,12 @@ export function generateGeometryShadow({
     confidence: TRAJECTORY_MODEL_CONFIG.confidence,
     authority: RESOLUTION_AUTHORITY_CONFIG,
     parkId: FIELD_GEOMETRY_CONFIG.parkId,
+    airPathModel: AIR_TRAJECTORY_PATH_CONFIG.model,
+    fenceModel: NEUTRAL_FENCE_CONFIG.model,
+    fenceSource: NEUTRAL_FENCE_CONFIG.source,
+    airPath: null,
+    fence: null,
+    wallContext: null,
     wallIntersection: null,
     isOverFence: null,
     fallbackUsed: false,
@@ -671,6 +716,18 @@ export function generateGeometryShadow({
           launchAngle: safeLaunchAngle,
           sprayAngle,
         });
+  const trajectoryWithSprayAngle = {
+    ...trajectory,
+    sprayAngle,
+  };
+  const airPath =
+    trajectory.trajectoryKind === "air"
+      ? buildAirPathSummary(trajectoryWithSprayAngle)
+      : null;
+  const fenceGeometry = evaluateFenceGeometry(
+    trajectoryWithSprayAngle,
+    airPath
+  );
   const result = {
     ...base,
     mode: FIELD_GEOMETRY_CONFIG.shadowMode,
@@ -684,6 +741,11 @@ export function generateGeometryShadow({
     directionModel: directionShadow.model ?? null,
     trajectory,
     fielderCandidates: buildFielderGeometryCandidates(trajectory),
+    airPath: fenceGeometry.airPath,
+    fence: fenceGeometry.fence,
+    wallContext: fenceGeometry.wallContext,
+    wallIntersection: fenceGeometry.wallIntersection,
+    isOverFence: fenceGeometry.isOverFence,
   };
   assertGeometryOutput(result);
   return result;

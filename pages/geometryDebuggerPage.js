@@ -1,9 +1,16 @@
 import { FIELD_GEOMETRY_CONFIG } from "../config/fieldGeometryConfig.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../config/battedBallDirectionConfig.js";
+import { NEUTRAL_FENCE_CONFIG } from "../config/neutralFenceConfig.js";
 import {
   classifyFieldSector,
 } from "../services/battedBallDirectionService.js";
-import { generateGeometryShadow } from "../services/defense/battedBallGeometryService.js";
+import { generateGeometryShadow } from "../services/defense/battedBallGeometryService.js?v=codex19";
+import {
+  evaluateAirTrajectoryAtTime,
+} from "../services/defense/airTrajectoryPathService.js";
+import {
+  getNeutralFenceDistanceFt,
+} from "../services/defense/fenceGeometryService.js";
 import {
   buildDefenseOpportunity,
 } from "../services/defense/defenseOpportunityService.js";
@@ -13,6 +20,7 @@ import {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const fieldSvg = document.getElementById("field-svg");
+const sideSvg = document.getElementById("side-svg");
 const form = document.getElementById("geometry-form");
 const summary = document.getElementById("geometry-summary");
 const errorOutput = document.getElementById("error-output");
@@ -23,6 +31,11 @@ const fieldingInput = document.getElementById("fielder-fielding");
 const speedInput = document.getElementById("fielder-speed");
 const defenseSeedInput = document.getElementById("defense-seed");
 const defenseCandidates = document.getElementById("defense-candidates");
+const trajectoryTimeInput =
+  document.getElementById("trajectory-time");
+const trajectoryTimeOutput =
+  document.getElementById("trajectory-time-output");
+let lastGeometry = null;
 
 function svgElement(name, attributes = {}, text = null) {
   const element = document.createElementNS(SVG_NS, name);
@@ -36,6 +49,12 @@ function svgElement(name, attributes = {}, text = null) {
 function appendSvg(name, attributes = {}, text = null) {
   const element = svgElement(name, attributes, text);
   fieldSvg.append(element);
+  return element;
+}
+
+function appendSideSvg(name, attributes = {}, text = null) {
+  const element = svgElement(name, attributes, text);
+  sideSvg.append(element);
   return element;
 }
 
@@ -77,7 +96,34 @@ function drawLabel(point, text, dx = 5, dy = -5) {
   );
 }
 
-function renderField(geometry) {
+function airTrajectoryInput(geometry) {
+  return {
+    ...geometry.trajectory,
+    sprayAngle: geometry.sprayAngle,
+  };
+}
+
+function getDisplayAirPoints(geometry) {
+  if (geometry.trajectoryKind !== "air") return [];
+  const trajectory = airTrajectoryInput(geometry);
+  const duration = geometry.trajectory.hangTimeSec;
+  return Array.from({ length: 33 }, (_, index) =>
+    evaluateAirTrajectoryAtTime(
+      trajectory,
+      (duration * index) / 32
+    )
+  );
+}
+
+function currentAirPoint(geometry) {
+  if (geometry?.trajectoryKind !== "air") return null;
+  return evaluateAirTrajectoryAtTime(
+    airTrajectoryInput(geometry),
+    Number(trajectoryTimeInput.value)
+  );
+}
+
+function renderField(geometry, currentPoint = null) {
   fieldSvg.replaceChildren();
   const fieldDepth = Math.max(
     330,
@@ -101,6 +147,25 @@ function renderField(geometry) {
       { stroke: "#f6f0d6", "stroke-width": 1.5 }
     );
   }
+  const fencePoints =
+    NEUTRAL_FENCE_CONFIG.fenceDistanceAnchors.map(
+      ([angle]) => {
+        const radians = (angle * Math.PI) / 180;
+        const distance = getNeutralFenceDistanceFt(angle);
+        return {
+          x: Math.sin(radians) * distance,
+          y: Math.cos(radians) * distance,
+        };
+      }
+    );
+  appendSvg("polyline", {
+    points: fencePoints
+      .map((point) => `${point.x},${-point.y}`)
+      .join(" "),
+    fill: "none",
+    stroke: "#ffb347",
+    "stroke-width": 2.5,
+  });
 
   const baseOrder = ["home", "first", "second", "third"];
   const basePoints = baseOrder.map(
@@ -132,7 +197,7 @@ function renderField(geometry) {
           trajectory.firstGroundPoint,
           ...trajectory.motionSegments.slice(1).map((segment) => segment.endPoint),
         ]
-      : [home, trajectory.landingPoint];
+      : getDisplayAirPoints(geometry);
   appendSvg("polyline", {
     points: trajectoryPoints
       .map((point) => `${point.x},${-point.y}`)
@@ -152,8 +217,25 @@ function renderField(geometry) {
     drawPoint(trajectory.stopPoint, "#ff7657", 4.2);
     drawLabel(trajectory.stopPoint, "stop", 6, 10);
   } else {
+    drawPoint({ x: 0, y: 0 }, "#ffffff", 4.2);
+    drawLabel({ x: 0, y: 0 }, "contact", 6, 12);
+    drawPoint(geometry.airPath.apexPoint, "#c44dff", 4.2);
+    drawLabel(geometry.airPath.apexPoint, "apex", 6, -6);
+    if (geometry.wallIntersection) {
+      drawPoint(geometry.wallIntersection, "#ffb347", 4.2);
+      drawLabel(
+        geometry.wallIntersection,
+        "wall",
+        6,
+        -6
+      );
+    }
     drawPoint(trajectory.landingPoint, "#f4d35e", 4.2);
     drawLabel(trajectory.landingPoint, "landing", 6, -6);
+    if (currentPoint) {
+      drawPoint(currentPoint, "#c44dff", 5);
+      drawLabel(currentPoint, "current", 6, 12);
+    }
   }
 
   for (const candidate of geometry.fielderCandidates) {
@@ -167,6 +249,102 @@ function renderField(geometry) {
   }
 }
 
+function renderSideView(geometry, currentPoint = null) {
+  sideSvg.replaceChildren();
+  if (geometry.trajectoryKind !== "air") {
+    sideSvg.setAttribute("viewBox", "0 -20 120 30");
+    appendSideSvg(
+      "text",
+      {
+        x: 8,
+        y: -6,
+        fill: "#526c57",
+        "font-size": 8,
+      },
+      "Ground trajectory: Air Path / Fence intersection not evaluated"
+    );
+    return;
+  }
+  const points = getDisplayAirPoints(geometry);
+  const maxDistance = Math.max(
+    geometry.trajectory.radialDistanceFt,
+    geometry.fence.fenceDistanceFt
+  );
+  const maxHeight = Math.max(
+    geometry.airPath.apexHeightFt,
+    geometry.fence.wallHeightFt
+  );
+  sideSvg.setAttribute(
+    "viewBox",
+    `-10 ${-(maxHeight + 15)} ${maxDistance + 30} ${
+      maxHeight + 25
+    }`
+  );
+  appendSideSvg("line", {
+    x1: 0,
+    y1: 0,
+    x2: maxDistance + 15,
+    y2: 0,
+    stroke: "#79907d",
+    "stroke-width": 1,
+  });
+  appendSideSvg("line", {
+    x1: geometry.fence.fenceDistanceFt,
+    y1: 0,
+    x2: geometry.fence.fenceDistanceFt,
+    y2: -geometry.fence.wallHeightFt,
+    stroke: "#ffb347",
+    "stroke-width": 4,
+  });
+  appendSideSvg("polyline", {
+    points: points
+      .map(
+        (point) =>
+          `${point.radialDistanceFt},${-point.z}`
+      )
+      .join(" "),
+    fill: "none",
+    stroke: "#225f35",
+    "stroke-width": 2,
+  });
+  for (const [label, point, color] of [
+    ["contact", points[0], "#17231a"],
+    ["apex", geometry.airPath.apexPoint, "#c44dff"],
+    ["wall", geometry.wallIntersection, "#ffb347"],
+    ["landing", points.at(-1), "#f4d35e"],
+    ["current", currentPoint, "#c44dff"],
+  ]) {
+    if (!point) continue;
+    const radialDistanceFt =
+      point.radialDistanceFt ?? Math.hypot(point.x, point.y);
+    appendSideSvg("circle", {
+      cx: radialDistanceFt,
+      cy: -point.z,
+      r: 3.2,
+      fill: color,
+    });
+    appendSideSvg(
+      "text",
+      {
+        x: radialDistanceFt + 4,
+        y: -point.z - 4,
+        fill: "#17231a",
+        "font-size": 7,
+      },
+      label
+    );
+  }
+}
+
+function renderVisuals(geometry) {
+  const point = currentAirPoint(geometry);
+  renderField(geometry, point);
+  renderSideView(geometry, point);
+  trajectoryTimeOutput.value = geometry.trajectoryKind === "air"
+    ? `${formatNumber(Number(trajectoryTimeInput.value))} sec`
+    : "not applicable";
+}
+
 function formatNumber(value, digits = 2) {
   return Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
@@ -177,6 +355,15 @@ function renderSummary(geometry, defense) {
   const timing = defense.timing;
   const result = defense.shadowCatchResult;
   const metrics = defense.metrics;
+  const outsideCandidates = geometry.fence
+    ? geometry.fielderCandidates.filter(
+        (candidate) =>
+          Math.hypot(
+            candidate.targetPoint.x,
+            candidate.targetPoint.y
+          ) > geometry.fence.fenceDistanceFt
+      ).length
+    : 0;
   const rows = [
     ["trajectoryClass", geometry.trajectoryClass],
     ["trajectoryKind", geometry.trajectoryKind],
@@ -189,6 +376,62 @@ function renderSummary(geometry, defense) {
     ],
     ["model", geometry.model],
     ["source", geometry.source],
+    ["airPath model", geometry.airPathModel],
+    ["fence model", geometry.fenceModel],
+    ["fence source", geometry.fenceSource],
+    ["park", geometry.parkId],
+    [
+      "fence distance / height",
+      geometry.fence
+        ? `${formatNumber(
+            geometry.fence.fenceDistanceFt
+          )} / ${formatNumber(
+            geometry.fence.wallHeightFt
+          )} ft`
+        : "-",
+    ],
+    [
+      "effective gravity",
+      geometry.airPath
+        ? `${formatNumber(
+            geometry.airPath.effectiveGravityFtPerSec2,
+            4
+          )} ft/s²`
+        : "-",
+    ],
+    [
+      "apex time / height / distance",
+      geometry.airPath
+        ? `${formatNumber(
+            geometry.airPath.apexTimeSec
+          )} sec / ${formatNumber(
+            geometry.airPath.apexHeightFt
+          )} ft / ${formatNumber(
+            geometry.airPath.apexRadialDistanceFt
+          )} ft`
+        : "-",
+    ],
+    ["wallContext", geometry.wallContext ?? "-"],
+    [
+      "wall time / height",
+      geometry.wallIntersection
+        ? `${formatNumber(
+            geometry.wallIntersection.timeSec
+          )} sec / ${formatNumber(
+            geometry.wallIntersection.z
+          )} ft`
+        : "-",
+    ],
+    [
+      "clearance",
+      geometry.wallIntersection
+        ? `${formatNumber(
+            geometry.wallIntersection.clearanceFt
+          )} ft`
+        : "-",
+    ],
+    ["isOverFence", geometry.isOverFence ?? "-"],
+    ["candidate targets outside fence", outsideCandidates],
     ["candidates", geometry.fielderCandidates.length],
     ["geometry RNG", geometry.geometryRngCalls],
     ["defense eligible", defense.eligible],
@@ -338,7 +581,23 @@ function render() {
       ),
       defenseSeed,
     });
-    renderField(geometry);
+    lastGeometry = geometry;
+    if (geometry.trajectoryKind === "air") {
+      trajectoryTimeInput.disabled = false;
+      trajectoryTimeInput.max =
+        String(geometry.trajectory.hangTimeSec);
+      trajectoryTimeInput.step = String(
+        geometry.trajectory.hangTimeSec / 200
+      );
+      trajectoryTimeInput.value = String(
+        geometry.airPath.apexTimeSec
+      );
+    } else {
+      trajectoryTimeInput.disabled = true;
+      trajectoryTimeInput.max = "1";
+      trajectoryTimeInput.value = "0";
+    }
+    renderVisuals(geometry);
     renderSummary(geometry, defense);
     renderCandidateProbabilities(opportunity);
   } catch (error) {
@@ -350,6 +609,10 @@ function render() {
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   render();
+});
+
+trajectoryTimeInput.addEventListener("input", () => {
+  if (lastGeometry) renderVisuals(lastGeometry);
 });
 
 render();
