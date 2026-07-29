@@ -1,5 +1,6 @@
 import { SMOOTHING_CONFIG } from "../evLaOutcomeService.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
+import { DEFENSE_CALIBRATION_CONFIG } from "../../config/defenseCalibrationConfig.js";
 import { BATTED_BALL_DEFENSE_CONFIG } from "../../config/defenseProbabilityConfig.js";
 import { RESOLUTION_AUTHORITY_CONFIG } from "../../config/resolutionAuthorityConfig.js";
 import {
@@ -7,7 +8,7 @@ import {
   getMlb2025ReferenceBenchmark,
 } from "./measurementReferenceService.js";
 
-export const MEASUREMENT_REPORT_SCHEMA_VERSION = 6;
+export const MEASUREMENT_REPORT_SCHEMA_VERSION = 7;
 export const MEASUREMENT_ALLOWED_SOURCES = Object.freeze([
   "ev_la_smoothed",
   "ev_la_neighbor",
@@ -298,6 +299,28 @@ export function getMeasurementDefinitions() {
       outsAboveAverageUrl:
         "https://www.mlb.com/glossary/statcast/outs-above-average",
     },
+    defenseCalibration: {
+      purpose:
+        "Simple Catch Defense Calibration is an internal Shadow self-consistency and sensitivity diagnostic, not calibration to an official MLB model.",
+      eligibility:
+        "Catch and Reach use eligible fly/popup opportunities; Secure is conditional on reach success and includes only secureAttempted events.",
+      residuals:
+        "executionResidual = caught - pActualOut has expectation zero under the same Shadow model; simCatchOAA = caught - pAlignedAverageOut can have a nonzero expectation when actual ability differs from average ability.",
+      legacyComparison:
+        "legacy out is a comparison result and is not synonymous with an observed catch or a ground-truth fielding label.",
+      probabilityBins:
+        "Probability diagnostics use fixed internal 5% bands; these are not official MLB Catch Probability bands.",
+      commonClock:
+        "The underlying Defense model uses batted-ball contact as t = 0, not MLB Catch Probability Opportunity Time.",
+      missingModels:
+        "Walls, liner en-route catches, actual alignments, throws, receivers, and runners are not implemented.",
+      authority:
+        "Resolution Authority remains legacy; Calibration is read-only and cannot switch authoritative outcomes.",
+      catchProbabilityUrl:
+        "https://www.mlb.com/glossary/statcast/catch-probability",
+      outsAboveAverageUrl:
+        "https://www.mlb.com/glossary/statcast/outs-above-average",
+    },
     evBands: "<70; 70-79.9; 80-89.9; 90-94.9; 95-99.9; 100-104.9; 105+ (lower bound inclusive except the first band)",
     laBands: "<-10; -10 to <0; 0 to <10; 10 to <25; 25 to <50; 50+ (lower bound inclusive except the first band)",
     percentileMethod:
@@ -386,6 +409,7 @@ export function buildMeasurementReportObject({
     direction: summary?.direction || {},
     geometry: summary?.geometry || {},
     defense: summary?.defense || {},
+    defenseCalibration: summary?.defenseCalibration || {},
     batting: results,
     pitching: buildPitchingSummary(pitchers),
     players: summary?.players || { away: [], home: [] },
@@ -794,6 +818,245 @@ function defenseShadowLines(defense, definitions, run) {
   ];
 }
 
+function calibrationBinLines(title, series) {
+  return [
+    `### ${title} 5% Probability Bands`,
+    "",
+    "| Band | count | predicted | observed | gap | Brier |",
+    "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ...(series?.bins || []).map((bin) => {
+      const closing = bin.upperInclusive ? "]" : ")";
+      const label = `[${Number(bin.lowerBound).toFixed(2)}, ${Number(
+        bin.upperBound
+      ).toFixed(2)}${closing}`;
+      return `| ${label} | ${formatNumber(bin.count)} | ${formatPct(
+        bin.predicted
+      )} | ${formatPct(bin.observed)} | ${formatPct(
+        bin.gap
+      )} | ${formatNumber(bin.brier, 5)} |`;
+    }),
+  ];
+}
+
+function calibrationLegacyBreakdownLines(title, breakdown) {
+  return [
+    `### ${title}`,
+    "",
+    "| Group | count | legacy out% | pAligned | pActual | actual - legacy |",
+    "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.entries(breakdown || {}).map(([key, line]) =>
+      `| ${mdCell(key)} | ${formatNumber(line.count)} | ${formatPct(
+        line.legacyOutRate
+      )} | ${formatPct(line.pAlignedAverageOut)} | ${formatPct(
+        line.pActualOut
+      )} | ${formatPct(line.actualMinusLegacyOutRate)} |`
+    ),
+  ];
+}
+
+function defenseCalibrationLines(defenseCalibration, definitions, run) {
+  const calibration = defenseCalibration?.calibration || {};
+  const grid = defenseCalibration?.counterfactualGrid || {};
+  const legacy = defenseCalibration?.legacyComparison || {};
+  const readiness = defenseCalibration?.readinessGate || {};
+  const diagnostics = defenseCalibration?.diagnostics || {};
+  const performance = defenseCalibration?.performance || {};
+  const definition = definitions?.defenseCalibration || {};
+  return [
+    "## Simple Catch Defense Calibration",
+    "",
+    `- mode: ${mdCell(defenseCalibration?.mode)}`,
+    `- model: ${mdCell(
+      defenseCalibration?.model || DEFENSE_CALIBRATION_CONFIG.model
+    )}`,
+    `- source: ${mdCell(
+      defenseCalibration?.source || DEFENSE_CALIBRATION_CONFIG.source
+    )}`,
+    `- evaluations: ${formatNumber(defenseCalibration?.evaluations)}`,
+    `- eligible: ${formatNumber(defenseCalibration?.eligible)}`,
+    `- ineligible: ${formatNumber(defenseCalibration?.ineligible)}`,
+    `- validEvents: ${formatNumber(defenseCalibration?.validEvents)}`,
+    `- invalidEvents: ${formatNumber(defenseCalibration?.invalidEvents)}`,
+    "",
+    "### Catch / Reach / Secure Calibration",
+    "",
+    "| Series | count | predicted | observed | residual | z | Brier | Log loss | ECE | max bin gap | status |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ...[
+      ["Catch", calibration.catch],
+      ["Reach", calibration.reach],
+      ["Secure", calibration.secure],
+    ].map(
+      ([label, line]) =>
+        `| ${label} | ${formatNumber(line?.count)} | ${formatPct(
+          line?.predictedRate
+        )} | ${formatPct(line?.observedRate)} | ${formatNumber(
+          line?.residual,
+          3
+        )} | ${
+          line?.standardizedResidual === null
+            ? "-"
+            : formatNumber(line?.standardizedResidual, 3)
+        } | ${formatNumber(line?.brierScore, 5)} | ${formatNumber(
+          line?.logLoss,
+          5
+        )} | ${formatNumber(line?.ece, 5)} | ${formatNumber(
+          line?.maximumBinGap,
+          5
+        )} | ${mdCell(line?.diagnosticStatus)} |`
+    ),
+    "",
+    ...calibrationBinLines("Catch", calibration.catch),
+    "",
+    ...calibrationBinLines("Reach", calibration.reach),
+    "",
+    ...calibrationBinLines("Secure", calibration.secure),
+    "",
+    "### FLD / SPD Counterfactual Grid",
+    "",
+    "| SPD | FLD | count | expected outs | expected out rate | neutral difference | expected skill outs |",
+    "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...Object.values(grid.cells || {}).map(
+      (cell) =>
+        `| ${formatNumber(cell.speed)} | ${formatNumber(
+          cell.fielding
+        )} | ${formatNumber(cell.count)} | ${formatNumber(
+          cell.expectedOuts,
+          3
+        )} | ${formatPct(cell.expectedOutRate)} | ${formatNumber(
+          cell.neutralDifferenceSum,
+          3
+        )} | ${formatNumber(cell.expectedSkillOuts, 3)} |`
+    ),
+    "",
+    "### Neutral Identity and Sensitivity",
+    "",
+    `- neutralIdentityValid: ${Boolean(
+      defenseCalibration?.neutralIdentity?.valid
+    )}`,
+    `- neutralIdentityChecks: ${formatNumber(
+      defenseCalibration?.neutralIdentity?.checks
+    )}`,
+    `- neutralIdentityViolationCount: ${formatNumber(
+      defenseCalibration?.neutralIdentity?.violationCount
+    )}`,
+    `- speedMonotonicChecks: ${formatNumber(
+      grid.speedMonotonicChecks
+    )}`,
+    `- speedMonotonicViolationCount: ${formatNumber(
+      grid.speedMonotonicViolationCount
+    )}`,
+    `- fieldingMonotonicChecks: ${formatNumber(
+      grid.fieldingMonotonicChecks
+    )}`,
+    `- fieldingMonotonicViolationCount: ${formatNumber(
+      grid.fieldingMonotonicViolationCount
+    )}`,
+    "",
+    "### Legacy Comparison",
+    "",
+    `- count: ${formatNumber(legacy?.overall?.count)}`,
+    `- legacyOutCount / Rate: ${formatNumber(
+      legacy?.overall?.legacyOutCount
+    )} / ${formatPct(legacy?.overall?.legacyOutRate)}`,
+    `- legacySafeCount / Rate: ${formatNumber(
+      legacy?.overall?.legacySafeCount
+    )} / ${formatPct(legacy?.overall?.legacySafeRate)}`,
+    `- pAlignedAverageOut: ${formatPct(
+      legacy?.overall?.pAlignedAverageOut
+    )}`,
+    `- pActualOut: ${formatPct(legacy?.overall?.pActualOut)}`,
+    `- pActualOut - legacy out rate: ${formatPct(
+      legacy?.overall?.actualMinusLegacyOutRate
+    )}`,
+    "",
+    "| Legacy | Shadow caught | Shadow not caught |",
+    "| --- | ---: | ---: |",
+    `| out | ${formatNumber(
+      legacy?.overall?.matrix?.out?.caught
+    )} | ${formatNumber(legacy?.overall?.matrix?.out?.notCaught)} |`,
+    `| safe | ${formatNumber(
+      legacy?.overall?.matrix?.safe?.caught
+    )} | ${formatNumber(legacy?.overall?.matrix?.safe?.notCaught)} |`,
+    "",
+    ...calibrationLegacyBreakdownLines(
+      "Legacy Comparison by Trajectory Class",
+      legacy.trajectoryClass
+    ),
+    "",
+    ...calibrationLegacyBreakdownLines(
+      "Legacy Comparison by Field Sector",
+      legacy.fieldSector
+    ),
+    "",
+    "### Authority Readiness Gate",
+    "",
+    `- selfConsistencyAvailable: ${Boolean(
+      readiness.selfConsistencyAvailable
+    )}`,
+    `- neutralIdentityValid: ${Boolean(
+      readiness.neutralIdentityValid
+    )}`,
+    `- sensitivityMonotonic: ${Boolean(
+      readiness.sensitivityMonotonic
+    )}`,
+    `- legacyComparisonAvailable: ${Boolean(
+      readiness.legacyComparisonAvailable
+    )}`,
+    `- alignmentComparisonAvailable: ${Boolean(
+      readiness.alignmentComparisonAvailable
+    )}`,
+    `- wallModelAvailable: ${Boolean(
+      readiness.wallModelAvailable
+    )}`,
+    `- linerCatchModelAvailable: ${Boolean(
+      readiness.linerCatchModelAvailable
+    )}`,
+    `- authoritySwitchReady: ${Boolean(
+      readiness.authoritySwitchReady
+    )}`,
+    `- blockers: ${(readiness.blockers || []).map(mdCell).join(", ")}`,
+    "",
+    "### Calibration Diagnostics and Performance",
+    "",
+    ...Object.entries(diagnostics).map(
+      ([key, value]) => `- ${mdCell(key)}: ${formatNumber(value)}`
+    ),
+    `- elapsedMs: ${formatNumber(run?.elapsedMs, 2)}`,
+    `- gamesPerSecond: ${formatNumber(run?.gamesPerSecond, 2)}`,
+    `- calibrationEligibleEvaluations: ${formatNumber(
+      performance.calibrationEligibleEvaluations
+    )}`,
+    `- counterfactualEvaluations: ${formatNumber(
+      performance.counterfactualEvaluations
+    )}`,
+    `- counterfactualEvaluationsPerEligible: ${formatNumber(
+      performance.counterfactualEvaluationsPerEligible
+    )}`,
+    `- rawEventsStored: ${Boolean(performance.rawEventsStored)}`,
+    `- rawProbabilitiesStored: ${Boolean(
+      performance.rawProbabilitiesStored
+    )}`,
+    "",
+    "### Simple Catch Defense Calibration Definitions and Limitations",
+    "",
+    `- Purpose: ${mdCell(definition.purpose)}`,
+    `- Eligibility: ${mdCell(definition.eligibility)}`,
+    `- Residuals: ${mdCell(definition.residuals)}`,
+    `- Legacy comparison: ${mdCell(definition.legacyComparison)}`,
+    `- 5% bands: ${mdCell(definition.probabilityBins)}`,
+    `- Common clock: ${mdCell(definition.commonClock)}`,
+    `- Missing models: ${mdCell(definition.missingModels)}`,
+    `- Authority: ${mdCell(definition.authority)}`,
+    `- Statcast Catch Probability glossary: ${mdCell(
+      definition.catchProbabilityUrl
+    )}`,
+    `- Statcast Outs Above Average glossary: ${mdCell(
+      definition.outsAboveAverageUrl
+    )}`,
+  ];
+}
+
 function plateDisciplineTable(data) {
   const rows = [
     ["Pitches", "pitches"], ["PA", "PA"], ["Pitches/PA", "pitchesPerPA"],
@@ -1144,7 +1407,7 @@ export function buildMeasurementMarkdown(options) {
     players, pitchers, gameDistribution, definitions, modelLimitations,
     validationPreset, validationPresetLabel, referenceBenchmark,
     referenceComparison, contactDisposition, pitchLocation, direction,
-    geometry, defense,
+    geometry, defense, defenseCalibration,
   } = report;
   const lines = [
     "# Baseball GM 高速計測レポート / High-Speed Measurement Report",
@@ -1252,6 +1515,12 @@ export function buildMeasurementMarkdown(options) {
     ...geometryShadowLines(geometry, definitions),
     "",
     ...defenseShadowLines(defense, definitions, run),
+    "",
+    ...defenseCalibrationLines(
+      defenseCalibration,
+      definitions,
+      run
+    ),
     "",
     "## EV/LA Batted Ball Profile",
     "",
@@ -1363,6 +1632,11 @@ export function buildMeasurementMarkdown(options) {
     `- Defense model: ${definitions.defenseShadow.model}`,
     `- Defense authority: ${definitions.defenseShadow.authority}`,
     `- Defense excluded inputs: ${definitions.defenseShadow.excludedInputs}`,
+    `- Defense Calibration purpose: ${definitions.defenseCalibration.purpose}`,
+    `- Defense Calibration eligibility: ${definitions.defenseCalibration.eligibility}`,
+    `- Defense Calibration residuals: ${definitions.defenseCalibration.residuals}`,
+    `- Defense Calibration legacy comparison: ${definitions.defenseCalibration.legacyComparison}`,
+    `- Defense Calibration authority: ${definitions.defenseCalibration.authority}`,
     `- AIR: ${definitions.battedBallClasses.AIR}`,
     "",
     "## AIへの確認依頼 / AI Review Request",

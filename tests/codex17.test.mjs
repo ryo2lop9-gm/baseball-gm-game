@@ -883,11 +883,11 @@ test("49 Defense accumulator retains no raw events, probabilities, or rolls", ()
   assert.equal("events" in createEmptyMeasurementAccumulator().defense, false);
 });
 
-test("50 Summary and Report schema versions are 6", () => {
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 6);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 6);
-  assert.equal(measurementSummary.reportSchemaVersion, 6);
-  assert.equal(measurementReport.reportSchemaVersion, 6);
+test("50 Summary and Report schema versions are 7", () => {
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
+  assert.equal(measurementSummary.reportSchemaVersion, 7);
+  assert.equal(measurementReport.reportSchemaVersion, 7);
 });
 
 test("51 every schema v5 top-level field remains present", () => {

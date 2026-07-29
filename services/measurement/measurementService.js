@@ -4,6 +4,10 @@ import {
 } from "../../engine/core/engineCore.js";
 import { PITCH_LOCATION_CONFIG } from "../../config/pitchLocationConfig.js";
 import { BATTED_BALL_DIRECTION_CONFIG } from "../../config/battedBallDirectionConfig.js";
+import {
+  DEFENSE_CALIBRATION_CONFIG,
+  DEFENSE_CALIBRATION_MODES,
+} from "../../config/defenseCalibrationConfig.js";
 import { BATTED_BALL_DEFENSE_CONFIG } from "../../config/defenseProbabilityConfig.js";
 import { FIELD_GEOMETRY_CONFIG } from "../../config/fieldGeometryConfig.js";
 import { createInitialSimState } from "../../state/gameState.js";
@@ -42,10 +46,16 @@ import {
   mergeDefenseMeasurement,
   recordDefenseMeasurement,
 } from "./measurementDefenseService.js";
+import {
+  createDefenseCalibrationAccumulator,
+  finalizeDefenseCalibrationMeasurement,
+  mergeDefenseCalibrationMeasurement,
+  recordDefenseCalibrationMeasurement,
+} from "./measurementDefenseCalibrationService.js";
 
 export const MAX_MEASUREMENT_GAMES = 10000;
 export const DEFAULT_MEASUREMENT_BATCH_SIZE = 25;
-export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 6;
+export const MEASUREMENT_SUMMARY_SCHEMA_VERSION = 7;
 
 const QOC_KEYS = Object.freeze([
   "Weak",
@@ -93,6 +103,9 @@ const STRUCTURAL_ERROR_CODES = new Set([
   "BATTED_BALL_DEFENSE_SEED_REQUIRED",
   "BATTED_BALL_DEFENSE_INPUT_INVALID",
   "BATTED_BALL_DEFENSE_OUTPUT_INVALID",
+  "BATTED_BALL_DEFENSE_CALIBRATION_MODE_INVALID",
+  "BATTED_BALL_DEFENSE_CALIBRATION_DEFENSE_REQUIRED",
+  "BATTED_BALL_DEFENSE_CALIBRATION_INPUT_INVALID",
   "EV_LA_LOOKUP_NOT_READY",
   "EV_LA_LOOKUP_INVALID",
   "EV_LA_LOOKUP_LOAD_FAILED",
@@ -188,13 +201,15 @@ export function createEmptyMeasurementAccumulator() {
     direction: createDirectionMeasurementAccumulator(),
     geometry: createGeometryMeasurementAccumulator(),
     defense: createDefenseMeasurementAccumulator(),
+    defenseCalibration: createDefenseCalibrationAccumulator(),
   };
 }
 
 export function createGameMeasurementAccumulator(
   directionMode = "shadow",
   geometryMode = "shadow",
-  defenseMode = "shadow"
+  defenseMode = "shadow",
+  defenseCalibrationMode = DEFENSE_CALIBRATION_CONFIG.defaultMode
 ) {
   return {
     qoc: {
@@ -216,6 +231,10 @@ export function createGameMeasurementAccumulator(
       defenseMode === BATTED_BALL_DEFENSE_CONFIG.defaultMode
         ? null
         : createDefenseMeasurementAccumulator(),
+    defenseCalibration:
+      defenseCalibrationMode === DEFENSE_CALIBRATION_CONFIG.defaultMode
+        ? null
+        : createDefenseCalibrationAccumulator(),
   };
 }
 
@@ -340,6 +359,12 @@ export function recordBattedBallMeasurement(gameAccumulator, event) {
   }
   if (gameAccumulator.defense) {
     recordDefenseMeasurement(gameAccumulator.defense, event);
+  }
+  if (gameAccumulator.defenseCalibration) {
+    recordDefenseCalibrationMeasurement(
+      gameAccumulator.defenseCalibration,
+      event
+    );
   }
   recordAdvancedBattedBallMeasurement(gameAccumulator.advanced, event);
 
@@ -473,6 +498,12 @@ export function commitCompletedMeasurementGame(
     mergeDefenseMeasurement(
       accumulator.defense,
       gameAccumulator.defense
+    );
+  }
+  if (gameAccumulator.defenseCalibration) {
+    mergeDefenseCalibrationMeasurement(
+      accumulator.defenseCalibration,
+      gameAccumulator.defenseCalibration
     );
   }
 }
@@ -673,6 +704,13 @@ export function finalizeMeasurementSummary(accumulator, run) {
     mode: defenseMode,
     geometryEvaluations: geometry.opportunities,
   });
+  const defenseCalibrationMode =
+    run.defenseCalibrationMode ||
+    DEFENSE_CALIBRATION_CONFIG.defaultMode;
+  const defenseCalibration = finalizeDefenseCalibrationMeasurement(
+    accumulator.defenseCalibration,
+    { mode: defenseCalibrationMode }
+  );
 
   return {
     reportSchemaVersion: MEASUREMENT_SUMMARY_SCHEMA_VERSION,
@@ -684,6 +722,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
       geometryMode,
       defenseMode,
       defenseSeed: run.defenseSeed ?? null,
+      defenseCalibrationMode,
       requestedGames: run.requestedGames,
       completedGames: accumulator.completedGames,
       failedGames: accumulator.failedGames,
@@ -702,6 +741,7 @@ export function finalizeMeasurementSummary(accumulator, run) {
     direction,
     geometry,
     defense,
+    defenseCalibration,
     contactDisposition,
     referenceBenchmark,
     referenceComparison,
@@ -788,6 +828,28 @@ export async function runMeasurementBatches({
     error.context = { defenseMode, geometryMode };
     throw error;
   }
+  const defenseCalibrationMode =
+    runtime.defenseCalibrationMode ??
+    DEFENSE_CALIBRATION_CONFIG.defaultMode;
+  if (!DEFENSE_CALIBRATION_MODES.includes(defenseCalibrationMode)) {
+    const error = new Error("Defense Calibration mode is invalid.");
+    error.code = "BATTED_BALL_DEFENSE_CALIBRATION_MODE_INVALID";
+    error.context = { defenseCalibrationMode };
+    throw error;
+  }
+  if (
+    defenseCalibrationMode ===
+      DEFENSE_CALIBRATION_CONFIG.diagnosticMode &&
+    defenseMode !== BATTED_BALL_DEFENSE_CONFIG.shadowMode
+  ) {
+    const error = new Error(
+      "Defense Calibration requires Defense Shadow."
+    );
+    error.code =
+      "BATTED_BALL_DEFENSE_CALIBRATION_DEFENSE_REQUIRED";
+    error.context = { defenseCalibrationMode, defenseMode };
+    throw error;
+  }
   const directionSeed = normalizeSeed(
     runtime.directionSeed ??
       deriveNamespacedSeed(normalizedSeed, BATTED_BALL_DIRECTION_CONFIG.model)
@@ -850,7 +912,8 @@ export async function runMeasurementBatches({
       const gameAccumulator = createGameMeasurementAccumulator(
         directionMode,
         geometryMode,
-        defenseMode
+        defenseMode,
+        defenseCalibrationMode
       );
 
       try {
@@ -884,6 +947,7 @@ export async function runMeasurementBatches({
             geometryMode,
             defenseMode,
             defenseSeed,
+            defenseCalibrationMode,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -903,6 +967,7 @@ export async function runMeasurementBatches({
             geometryMode,
             defenseMode,
             defenseSeed,
+            defenseCalibrationMode,
             requestedGames,
             elapsedMs: now() - startedAt,
           });
@@ -935,6 +1000,7 @@ export async function runMeasurementBatches({
     geometryMode,
     defenseMode,
     defenseSeed,
+    defenseCalibrationMode,
     requestedGames,
     elapsedMs: now() - startedAt,
   });

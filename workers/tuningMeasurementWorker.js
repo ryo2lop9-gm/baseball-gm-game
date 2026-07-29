@@ -45,6 +45,10 @@ async function startMeasurement(runId, payload) {
       homeTeam: payload?.homeTeam,
       gameCount: payload?.gameCount,
       seed: payload?.seed,
+      runtime: {
+        defenseCalibrationMode:
+          payload?.defenseCalibrationMode ?? "off",
+      },
       shouldCancel: () => cancelRequested && activeRunId === runId,
       onProgress: (progress) =>
         postProgress(

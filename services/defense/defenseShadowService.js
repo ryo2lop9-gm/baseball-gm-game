@@ -3,14 +3,11 @@ import {
   BATTED_BALL_DEFENSE_MODES,
 } from "../../config/defenseProbabilityConfig.js";
 import { DEFENSE_POSITIONS } from "../../config/defenseConfig.js";
-import { FIELD_GEOMETRY_CONFIG } from "../../config/fieldGeometryConfig.js";
 import { RESOLUTION_AUTHORITY_CONFIG } from "../../config/resolutionAuthorityConfig.js";
 import {
   buildDefenseOpportunity,
-  calculateSecureLogit,
-  clampDefenseValue,
-  sigmoidDefenseValue,
 } from "./defenseOpportunityService.js";
+import { calculateDefenseAbilityProbabilities } from "./defenseAbilityProbabilityService.js";
 import {
   createSeededRandom,
   deriveNamespacedSeed,
@@ -256,56 +253,29 @@ export function generateDefenseShadow({
   const speed = assertRating("speed", player.ratings.speed);
   const fielding = assertRating("fielding", player.defense.fielding);
   const arm = assertRating("arm", player.defense.arm);
+  const ability = calculateDefenseAbilityProbabilities({
+    trajectoryClass: opportunity.trajectoryClass,
+    exitVelocity: geometryShadow.exitVelocity,
+    pathDistanceFt: average.pathDistanceFt,
+    ballTimeSec: average.ballTimeSec,
+    movementDirection: average.movementDirection,
+    speed,
+    fielding,
+  });
+  const {
+    standardizedSpeed,
+    standardizedFielding,
+    speedMultiplier,
+    routeMultiplier,
+    reactionTimeActual,
+    moveSpeedActual,
+    fielderEtaActual,
+    adjustedActualMargin,
+    pReachActual,
+    pSecureActual,
+    pActualOut,
+  } = ability;
   const config = BATTED_BALL_DEFENSE_CONFIG;
-  const standardizedSpeed =
-    (speed - config.ratingCenter) / config.ratingScale;
-  const standardizedFielding =
-    (fielding - config.ratingCenter) / config.ratingScale;
-  const speedMultiplier = clampDefenseValue(
-    1 +
-      config.actualAbility.speedMultiplierPerStandardizedPoint *
-        standardizedSpeed,
-    config.limits.speedMultiplier[0],
-    config.limits.speedMultiplier[1]
-  );
-  const routeMultiplier = clampDefenseValue(
-    1 +
-      config.actualAbility.routeMultiplierPerStandardizedPoint *
-        standardizedFielding,
-    config.limits.routeMultiplier[0],
-    config.limits.routeMultiplier[1]
-  );
-  const reactionTimeActual = clampDefenseValue(
-    FIELD_GEOMETRY_CONFIG.fielderAssumptions.reactionTimeSec -
-      config.actualAbility.reactionTimeAdjustmentSecPerStandardizedPoint *
-        standardizedFielding,
-    config.limits.reactionTimeSec[0],
-    config.limits.reactionTimeSec[1]
-  );
-  const moveSpeedActual =
-    FIELD_GEOMETRY_CONFIG.fielderAssumptions.moveSpeedFtPerSec *
-    speedMultiplier *
-    routeMultiplier;
-  const fielderEtaActual =
-    reactionTimeActual + average.pathDistanceFt / moveSpeedActual;
-  const adjustedActualMargin =
-    average.ballTimeSec -
-    fielderEtaActual +
-    average.directionMarginAdjustmentSec;
-  const pReachActual = sigmoidDefenseValue(
-    adjustedActualMargin /
-      config.reachUncertaintySec[opportunity.trajectoryClass]
-  );
-  const pSecureActual = sigmoidDefenseValue(
-    calculateSecureLogit({
-      trajectoryClass: opportunity.trajectoryClass,
-      exitVelocity: geometryShadow.exitVelocity,
-      adjustedMarginSec: adjustedActualMargin,
-    }) +
-      config.actualAbility.secureFieldingLogitPerStandardizedPoint *
-        standardizedFielding
-  );
-  const pActualOut = pReachActual * pSecureActual;
   const pAlignedAverageOut = average.pCatchAverage;
   const pStandardAlignmentOut = pAlignedAverageOut;
 

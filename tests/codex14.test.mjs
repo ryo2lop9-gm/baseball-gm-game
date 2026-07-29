@@ -106,9 +106,11 @@ function normalizeSummaryForCompatibility(summary) {
   delete normalized.run.geometryMode;
   delete normalized.run.defenseMode;
   delete normalized.run.defenseSeed;
+  delete normalized.run.defenseCalibrationMode;
   delete normalized.direction;
   delete normalized.geometry;
   delete normalized.defense;
+  delete normalized.defenseCalibration;
   const removeSpeed = (value) => {
     if (!value || typeof value !== "object") return;
     if (value.ratings && typeof value.ratings === "object") {
@@ -714,14 +716,14 @@ test("Pitch Location aggregation, all 25 cells, and diagnostics do not regress",
   );
 });
 
-test("Summary and Report schema versions are six", () => {
+test("Summary and Report schema versions are seven", () => {
   const report = buildMeasurementReportObject({
     summary: measurementSummary,
     teams: compatibilityTeams,
     generatedAt: "2026-07-28T00:00:00.000Z",
   });
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 6);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 6);
-  assert.equal(measurementSummary.reportSchemaVersion, 6);
-  assert.equal(report.reportSchemaVersion, 6);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
+  assert.equal(measurementSummary.reportSchemaVersion, 7);
+  assert.equal(report.reportSchemaVersion, 7);
 });

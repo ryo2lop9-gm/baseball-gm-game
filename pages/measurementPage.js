@@ -13,6 +13,10 @@ import {
   DEFAULT_MEASUREMENT_SEED,
   normalizeSeed,
 } from "../services/seededRandomService.js";
+import {
+  DEFENSE_CALIBRATION_CONFIG,
+  DEFENSE_CALIBRATION_MODES,
+} from "../config/defenseCalibrationConfig.js";
 
 export async function copyMeasurementText(text, clipboard = null) {
   try {
@@ -58,6 +62,7 @@ export function createMeasurementPageController({
     gameCount: 100,
     requestedGames: 100,
     seed: DEFAULT_MEASUREMENT_SEED,
+    defenseCalibrationMode: DEFENSE_CALIBRATION_CONFIG.defaultMode,
     completedGames: 0,
     failedGames: 0,
     elapsedMs: 0,
@@ -149,6 +154,14 @@ export function createMeasurementPageController({
     try {
       const gameCount = normalizeMeasurementGameCount(dom.gameCountInput?.value);
       const seed = normalizeSeed(dom.seedInput?.value);
+      const defenseCalibrationMode =
+        dom.defenseCalibrationMode?.value ??
+        DEFENSE_CALIBRATION_CONFIG.defaultMode;
+      if (!DEFENSE_CALIBRATION_MODES.includes(defenseCalibrationMode)) {
+        const error = new Error("Defense Calibration mode is invalid.");
+        error.code = "BATTED_BALL_DEFENSE_CALIBRATION_MODE_INVALID";
+        throw error;
+      }
       const context = getCurrentContext();
       const teams = context.teams;
 
@@ -158,6 +171,7 @@ export function createMeasurementPageController({
         gameCount,
         requestedGames: gameCount,
         seed,
+        defenseCalibrationMode,
         validationPreset: context.validationPreset,
         completedGames: 0,
         failedGames: 0,
@@ -179,6 +193,7 @@ export function createMeasurementPageController({
           homeTeam: structuredClone(teams.home),
           gameCount,
           seed,
+          defenseCalibrationMode,
         },
         {
           onProgress: updateProgress,
@@ -245,6 +260,21 @@ export function createMeasurementPageController({
 
     dom.seedInput?.addEventListener("change", () => {
       state = { ...state, seed: normalizeSeed(dom.seedInput.value) };
+      render();
+    });
+    dom.defenseCalibrationMode?.addEventListener("change", () => {
+      const defenseCalibrationMode =
+        dom.defenseCalibrationMode.value;
+      if (!DEFENSE_CALIBRATION_MODES.includes(defenseCalibrationMode)) {
+        failMeasurement(
+          Object.assign(
+            new Error("Defense Calibration mode is invalid."),
+            { code: "BATTED_BALL_DEFENSE_CALIBRATION_MODE_INVALID" }
+          )
+        );
+        return;
+      }
+      state = { ...state, defenseCalibrationMode };
       render();
     });
 

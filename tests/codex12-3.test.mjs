@@ -412,14 +412,14 @@ test("all pitchLocation summary percentages remain finite", () => {
   }
 });
 
-test("Summary and Report schema versions are both six", () => {
+test("Summary and Report schema versions are both seven", () => {
   const summary = summarizeEvents([]);
   const report = buildMeasurementReportObject({ summary, teams: {} });
 
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 6);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 6);
-  assert.equal(summary.reportSchemaVersion, 6);
-  assert.equal(report.reportSchemaVersion, 6);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
+  assert.equal(summary.reportSchemaVersion, 7);
+  assert.equal(report.reportSchemaVersion, 7);
 });
 
 test("JSON contains pitchLocation and every location breakdown", () => {

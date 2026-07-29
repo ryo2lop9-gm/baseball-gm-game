@@ -3,6 +3,9 @@ export function getMeasurementDom() {
     measurementPage: document.getElementById("measurementPage"),
     gameCountInput: document.getElementById("measurementGameCountInput"),
     seedInput: document.getElementById("measurementSeedInput"),
+    defenseCalibrationMode: document.getElementById(
+      "measurementDefenseCalibrationMode"
+    ),
     presetButtons: document.querySelectorAll("[data-measurement-games]"),
     startButton: document.getElementById("measurementStartBtn"),
     cancelButton: document.getElementById("measurementCancelBtn"),

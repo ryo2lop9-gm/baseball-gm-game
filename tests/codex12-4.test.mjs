@@ -522,14 +522,14 @@ test("Markdown never exposes NaN, Infinity, or undefined", () => {
   assert.doesNotMatch(markdown, /NaN|Infinity|undefined/);
 });
 
-test("JSON and Summary/Report schemas are version 6", () => {
+test("JSON and Summary/Report schemas are version 7", () => {
   const report = buildMeasurementReportObject(reportOptions);
   const parsed = JSON.parse(buildMeasurementJson(reportOptions));
-  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 6);
-  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 6);
-  assert.equal(measuredSummary.reportSchemaVersion, 6);
-  assert.equal(report.reportSchemaVersion, 6);
-  assert.equal(parsed.reportSchemaVersion, 6);
+  assert.equal(MEASUREMENT_SUMMARY_SCHEMA_VERSION, 7);
+  assert.equal(MEASUREMENT_REPORT_SCHEMA_VERSION, 7);
+  assert.equal(measuredSummary.reportSchemaVersion, 7);
+  assert.equal(report.reportSchemaVersion, 7);
+  assert.equal(parsed.reportSchemaVersion, 7);
 });
 
 test("rendering does not mutate the summary object", () => {

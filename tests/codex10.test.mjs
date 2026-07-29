@@ -198,7 +198,7 @@ test("advanced aggregate groups and entity totals reconcile", async () => {
   const pitches = summary.plateDiscipline.combined.pitches;
 
   assert.equal(summary.status, "completed");
-  assert.equal(summary.reportSchemaVersion, 6);
+  assert.equal(summary.reportSchemaVersion, 7);
   assert.ok(pitches > 0);
   assert.equal(sumGroup(summary.breakdowns.count, "pitches"), pitches);
   assert.equal(sumGroup(summary.breakdowns.pitchType, "pitches"), pitches);
@@ -257,7 +257,7 @@ test("advanced aggregate groups and entity totals reconcile", async () => {
   }
 });
 
-test("schema v6 report carries diagnostics, definitions, and explicit limitations", async () => {
+test("schema v7 report carries diagnostics, definitions, and explicit limitations", async () => {
   const teams = createMlbAverageValidationTeams();
   const summary = await runMeasurementBatches({
     awayTeam: teams.away,
@@ -274,7 +274,7 @@ test("schema v6 report carries diagnostics, definitions, and explicit limitation
   const json = buildMeasurementJson(options);
   const markdown = buildMeasurementMarkdown(options);
 
-  assert.equal(report.reportSchemaVersion, 6);
+  assert.equal(report.reportSchemaVersion, 7);
   for (const key of [
     "definitions",
     "modelLimitations",
@@ -326,7 +326,7 @@ test("schema v6 report carries diagnostics, definitions, and explicit limitation
     }
   }
   assert.doesNotMatch(json, /NaN|Infinity|undefined/);
-  assert.equal(JSON.parse(json).reportSchemaVersion, 6);
+  assert.equal(JSON.parse(json).reportSchemaVersion, 7);
 });
 
 test("measurement HTML ids are unique and quality breakdown rendering stays wired", async () => {

@@ -1107,6 +1107,13 @@ export function renderMeasurementPage(state, dom) {
 
   if (dom.gameCountInput && !isRunning) dom.gameCountInput.value = state.gameCount;
   if (dom.seedInput && !isRunning) dom.seedInput.value = state.seed;
+  if (dom.defenseCalibrationMode) {
+    if (!isRunning) {
+      dom.defenseCalibrationMode.value =
+        state.defenseCalibrationMode || "off";
+    }
+    dom.defenseCalibrationMode.disabled = isRunning;
+  }
   if (dom.startButton) dom.startButton.disabled = isRunning;
   if (dom.cancelButton) dom.cancelButton.disabled = !isRunning || state.status === "cancelling";
   dom.presetButtons?.forEach((button) => {
